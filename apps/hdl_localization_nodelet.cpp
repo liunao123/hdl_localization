@@ -205,19 +205,35 @@ private:
     // transform pointcloud into odom_child_frame_id
     std::string tfError;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
-    if(this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1), &tfError))
-    {
-        if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
-            NODELET_ERROR("point cloud cannot be transformed into target frame!!");
-            return;
-        }
-    }else
-    {
-        NODELET_ERROR(tfError.c_str());
-        return;
-    }
 
-    auto filtered = downsample(cloud);
+    // 转换失败，直接跳过
+    // 不用里程计，直接用livox的frame
+    // modify by ln 20221122
+    *cloud = *pcl_cloud;
+
+    // try
+    // {
+    //   if( this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(1), &tfError) )
+    //   {
+    //       std::cout << __FILE__ << ":" << __LINE__ << "---------------------------------" << odom_child_frame_id << std::endl;  
+    //       if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
+    //           ROS_ERROR("point cloud cannot be transformed into target frame!!");
+    //           return;
+    //       }
+    //   }
+    // }
+    // catch(tf::TransformException &ex)
+    // {
+    //   ROS_WARN("%s", ex.what());
+    //   std::cout << __FILE__ << ":" << __LINE__ << "---------------------------------" << std::endl;
+    //   NODELET_ERROR(tfError.c_str());
+    //   return;
+    // }
+
+
+    // 点云已经是提取的 surf 点，不滤波
+    // auto filtered = downsample(cloud);
+    auto filtered = cloud;    
     last_scan = filtered;
 
     if(relocalizing) {
@@ -272,9 +288,9 @@ private:
       aligned_pub.publish(aligned);
     }
 
-    if(status_pub.getNumSubscribers()) {
+    // if(status_pub.getNumSubscribers()) {
       publish_scan_matching_status(points_msg->header, aligned);
-    }
+    // }
 
     publish_odometry(points_msg->header.stamp, pose_estimator->matrix());
   }
@@ -309,6 +325,8 @@ private:
    * @param
    */
   bool relocalize(std_srvs::EmptyRequest& req, std_srvs::EmptyResponse& res) {
+    ROS_ERROR("Try global localization.");
+
     if(last_scan == nullptr) {
       NODELET_INFO_STREAM("no scan has been received");
       return false;
@@ -440,7 +458,23 @@ private:
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
 
-    pose_pub.publish(odom);
+    // printf("%f %f %f %f %f %f %f %f \n", stamp.toSec(), odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z
+    // , odom.pose.pose.orientation.x  , odom.pose.pose.orientation.y, odom.pose.pose.orientation.z, odom.pose.pose.orientation.w );
+
+    static std::ofstream ofs;
+    ofs.open( "/home/hdl_pose.txt", std::ios::app);
+    ofs << std::to_string(stamp.toSec())
+        << " "  << std::to_string(odom.pose.pose.position.x)
+        << " "  << std::to_string(odom.pose.pose.position.y)
+        << " "  << std::to_string(odom.pose.pose.position.z)
+        << " "  << std::to_string(odom.pose.pose.orientation.x)
+        << " "  << std::to_string(odom.pose.pose.orientation.y)
+        << " "  << std::to_string(odom.pose.pose.orientation.z)
+        << " "  << std::to_string(odom.pose.pose.orientation.w) << std::endl;
+    ofs.close();
+
+    pose_pub.publish(odom); 
+
   }
 
   /**
@@ -452,8 +486,10 @@ private:
 
     status.has_converged = registration->hasConverged();
     status.matching_error = registration->getFitnessScore();
+    // ROS_INFO("has_converged is %d, matching_error(getFitnessScore) is %f", status.has_converged, status.matching_error);
 
-    const double max_correspondence_dist = 0.5;
+    double max_correspondence_dist = 0.5;
+    max_correspondence_dist = private_nh.param<double>("/max_correspondence_dist", 0.5);
 
     int num_inliers = 0;
     std::vector<int> k_indices;
@@ -467,6 +503,20 @@ private:
     }
     status.inlier_fraction = static_cast<float>(num_inliers) / aligned->size();
     status.relative_pose = tf2::eigenToTransform(Eigen::Isometry3d(registration->getFinalTransformation().cast<double>())).transform;
+
+    // 匹配好的点<内点比例> 大于 该阈值认为 定位成功
+    float LOC_SUCCESS_THRESHLOD = 0.8;
+    LOC_SUCCESS_THRESHLOD = private_nh.param<double>("/LOC_SUCCESS_THRESHLOD", 0.8);
+    if( status.inlier_fraction > LOC_SUCCESS_THRESHLOD )
+    {
+      //
+    }
+    else
+    {
+      ROS_WARN("inlier_fraction is<%lf> less LOC_SUCCESS_THRESHLOD : %lf . ", status.inlier_fraction, LOC_SUCCESS_THRESHLOD);
+      // TODO call relocate locate falied .try to call /relocate service .
+      return ;
+    }
 
     status.prediction_labels.reserve(2);
     status.prediction_errors.reserve(2);

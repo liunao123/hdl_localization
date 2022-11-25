@@ -4,6 +4,7 @@
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
+#include <tf_conversions/tf_eigen.h>
 #include <tf/transform_broadcaster.h>
 
 #include <std_msgs/String.h>
@@ -44,9 +45,11 @@ private:
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
     globalmap.reset(new pcl::PointCloud<PointT>());
+    ROS_WARN("start load global map .");
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
 
+    ROS_WARN("size if global map: %ld . ",globalmap->points.size());
     std::ifstream utm_file(globalmap_pcd + ".utm");
     if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true)) {
       double utm_easting;
@@ -70,6 +73,8 @@ private:
     voxelgrid->filter(*filtered);
 
     globalmap = filtered;
+    ROS_WARN("size if global map after voxel filter: %ld . ", globalmap->points.size());
+
   }
 
   void pub_once_cb(const ros::WallTimerEvent& event) {
