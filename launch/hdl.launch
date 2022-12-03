@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<launch>
+
+  <param name="use_sim_time" value="true" />
+
+  <arg name="use_global_localization" default="true" />
+
+  <!-- 全局定位：暂时不适用于livox -->
+  <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
+
+  <!-- ukf 定位 -->
+  <include file="$(find hdl_localization)/launch/hdl_localization.launch" />
+
+  <!-- 平面特征点提取 -->
+  <include file="$(find r2live)/launch/get_surf_points.launch" />
+
+</launch>
