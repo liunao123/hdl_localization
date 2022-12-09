@@ -185,18 +185,11 @@ private:
    */
   void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg) {
 
-    static tf::TransformBroadcaster br;
-    static const Eigen::Vector3d Lidar_offset_to_IMU(0.05512, 0.02226, 0.0297); // Horizon
-
-    tf::Transform transform;
-    tf::Quaternion q;
-    transform.setOrigin(tf::Vector3(Lidar_offset_to_IMU[0], Lidar_offset_to_IMU[1], Lidar_offset_to_IMU[2]));
-    q.setW(1);
-    q.setX(0);
-    q.setY(0);
-    q.setZ(0);
-    transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, points_msg->header.stamp, "body", "livox"));
+    // static int pc_cnts = 0;
+    // if (pc_cnts++ % 2 )
+    // {
+    //   return ;
+    // }
 
     std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
     if(!pose_estimator) {
@@ -226,17 +219,13 @@ private:
     // 不用里程计，直接用livox的frame
     // modify by ln 20221122
     // *cloud = *pcl_cloud;
+    /*         */
     try
     {
-      if( this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.2), &tfError) )
+      if( this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.05), &tfError) )
       {
-          // std::cout << __FILE__ << ":" << __LINE__ << odom_child_frame_id << "--" << pcl_cloud->header.frame_id << std::endl;  
           geometry_msgs::TransformStamped body_pose_in_map = tf_buffer.lookupTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1));
-          // std::cout << body_pose_in_map << std::endl;
-          // tf2::Transform tt;
-          // tf2::fromMsg(body_pose_in_map, tt);
           if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
-              // std::cout << __FILE__ << ":" << __LINE__ << "---------------------------------" << std::endl;
               ROS_ERROR("point cloud cannot be transformed into target frame!!");
               return;
           }
@@ -254,49 +243,37 @@ private:
       return;
     }
 
-    // // pcl::PointCloud<PointT>::Ptr temp(new pcl::PointCloud<PointT>());
-    // *cloud = *pcl_cloud;
-    
+    // 手动 从livox 转到body 坐标系下
     // cloud->points.clear();
-    // std::cout << __FILE__ << ":" << __LINE__ << " :" << cloud->points.size()  << std::endl;
+    // cloud->points.resize( pcl_cloud->points.size() );
 
-    //   cloud->header.frame_id = "base_link";
-    //   cloud->header.stamp = pcl_cloud->header.stamp;
+    // cloud->header.frame_id = odom_child_frame_id;
+    // cloud->header.stamp = pcl_cloud->header.stamp;
+
+    // static const Eigen::Vector3d Lidar_offset_to_IMU(0.05512, 0.02226, 0.0297); // Horizon
 
     // for(int i=0; i < pcl_cloud->points.size() ; i++)
     // {
-    //   PointT pp;
-    //   pp.x = pcl_cloud->points[i].x + Lidar_offset_to_IMU[0];
-    //   pp.y = pcl_cloud->points[i].y + Lidar_offset_to_IMU[1];
-    //   pp.z = pcl_cloud->points[i].z + Lidar_offset_to_IMU[2];      
-    //   cloud->points.push_back(pp);
+    //   cloud->points[i].x = pcl_cloud->points[i].x + Lidar_offset_to_IMU[0];
+    //   cloud->points[i].y = pcl_cloud->points[i].y + Lidar_offset_to_IMU[1];
+    //   cloud->points[i].z = pcl_cloud->points[i].z + Lidar_offset_to_IMU[2];
     // }
 
-    // pcl::io::savePCDFile ( "/home/liunao/hdl/" + pcl_cloud->header.frame_id + ".pcd", *pcl_cloud );
-    // pcl::io::savePCDFile ( "/home/liunao/hdl/base_link.pcd" , *temp );
-    // aligned_pub.publish(temp);
-    // return;
-
-    cloud->header.frame_id = odom_child_frame_id;
-    // std::cout << __FILE__ << ":" << __LINE__ << " :" << cloud->points.size()  << std::endl;
     if (cloud->header.frame_id.empty())
     {
-      std::cout << __FILE__ << ":" << __LINE__ << "---------------------------------" << odom_child_frame_id << "--" << pcl_cloud->header.frame_id << std::endl;  
-      ROS_ERROR("cloud->header.frame_id.isempty");
-      // return ;
+      ROS_ERROR("cloud->header.frame_id.is empty, shoule be %s . ", odom_child_frame_id.c_str() );
+      return ;
     }
     // 点云已经是提取的 surf 点，不滤波
     // auto filtered = downsample(cloud);
     auto filtered = cloud;
     filtered->header = cloud->header;
+    // filtered->header.frame_id = odom_child_frame_id;
+
     if (filtered->header.frame_id.empty())
     {
-      ROS_ERROR("filtered->header.frame_id.isempty");
-      // return ;
-    }
-    else
-    {
-      // std::cout << __FILE__ << ":" << __LINE__ << "--- filtered->header.frame_id : " << filtered->header.frame_id <<  filtered->points.size()  << std::endl;
+      ROS_ERROR("filtered->header.frame_id.is empty");
+      return ;
     }
 
     last_scan = filtered;
@@ -329,21 +306,28 @@ private:
 
     // odometry-based prediction
     ros::Time last_correction_time = pose_estimator->last_correction_time();
+    
+    // ROS_INFO("pc time with now tf, TIME diff is: %f ", (stamp - last_correction_time).toSec() );
+    
     if(private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero())
     {
       geometry_msgs::TransformStamped odom_delta;
-      if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.05))) {
-        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0));
-      } else if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0))) {
-        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0));
+      if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.2))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.2));
+        // ROS_ERROR("stmap");
+      } else if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0.2))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0.2));
+        // ROS_ERROR("ros::Time(0)");
+        ROS_WARN("ros::Time(0) : pc time with now tf, TIME diff is: %f ", (stamp - odom_delta.header.stamp).toSec() );
       }
 
+      static int cnts = 0;
       if(odom_delta.header.stamp.isZero()) {
-        NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+        NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id 
+          << " canTransform failed cnts:" << cnts++ );
       } else {
         Eigen::Isometry3d delta = tf2::transformToEigen(odom_delta);
         pose_estimator->predict_odom(delta.cast<float>().matrix());
-        // std::cout << __FILE__ << ":" << __LINE__ << ". enable_robot_odometry_prediction true " << std::endl;
       }
     }
 
@@ -358,8 +342,7 @@ private:
 
     publish_scan_matching_status(points_msg->header, aligned);
 
-    publish_odometry(points_msg->header.stamp, pose_estimator->matrix());
-
+    publish_odometry(stamp, pose_estimator->matrix());
   }
 
   /**
@@ -483,15 +466,17 @@ private:
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
     if(tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
+
+      /* 
+      ros::Time s_t = ros::Time::now();
+      ROS_WARN("one");
+
       geometry_msgs::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
       map_wrt_frame.header.stamp = stamp;
       map_wrt_frame.header.frame_id = odom_child_frame_id;
       map_wrt_frame.child_frame_id = "map";
 
-      geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0), ros::Duration(1));
-      // geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, stamp, ros::Duration(0.1));
-      
-      // std::cout << "frame_wrt_odom:" << frame_wrt_odom << std::endl;
+      geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0), ros::Duration(0.1));
 
       Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
 
@@ -508,19 +493,43 @@ private:
       odom_trans.header.frame_id = "map";
       odom_trans.child_frame_id = robot_odom_frame_id;
 
-      // std::cout << __FILE__ << ":" << __LINE__ << "-" << robot_odom_frame_id << "--" <<  << std::endl;
-      ROS_INFO("%s,  %s",robot_odom_frame_id.c_str() , odom_child_frame_id.c_str());
+      tf_broadcaster.sendTransform(odom_trans);
+      
+      // ROS_WARN("one use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
+      // ROS_WARN(" two TM xyz is %lf, %lf, %lf ", odom_trans.transform.translation.x,  odom_trans.transform.translation.y, odom_trans.transform.translation.z );
+      */
 
-      tf_broadcaster.sendTransform(odom_trans);
-    } else {
-      // std::cout << __FILE__ << ":" << __LINE__ << "------" << std::endl;
-      ROS_WARN("%s,  %s",robot_odom_frame_id.c_str() , odom_child_frame_id.c_str());
-      geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
-      odom_trans.header.stamp = stamp;
-      odom_trans.header.frame_id = "map";
-      odom_trans.child_frame_id = odom_child_frame_id;
-      tf_broadcaster.sendTransform(odom_trans);
+      // s_t = ros::Time::now();
+      
+      /*  */
+      // 后到前的变换据矩阵， T_mb : body frame 到 map frame
+      geometry_msgs::TransformStamped T_mb = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
+      geometry_msgs::TransformStamped T_wb = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id , ros::Time(0), ros::Duration(0.1));
+      Eigen::Isometry3d T_mb_eigen , T_wb_eigen, T_mw;
+      tf::transformMsgToEigen (T_mb.transform , T_mb_eigen );
+      tf::transformMsgToEigen (T_wb.transform , T_wb_eigen );
+      T_mw =  T_mb_eigen  * T_wb_eigen.inverse();
+
+      geometry_msgs::TransformStamped TM;
+      tf::transformEigenToMsg (T_mw , TM.transform);
+      TM.header.stamp = stamp;
+      TM.header.frame_id = "map";
+      TM.child_frame_id = robot_odom_frame_id;
+      tf_broadcaster.sendTransform(TM);
+      // ROS_WARN("two use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
+      // ROS_WARN(" pub  TM : %s",robot_odom_frame_id.c_str()  );
+      // ROS_WARN(" two TM xyz is %lf, %lf, %lf ", TM.transform.translation.x,  TM.transform.translation.y, TM.transform.translation.z );
+      
     }
+    // else
+    // {
+    //   ROS_WARN("%s,  %s",robot_odom_frame_id.c_str() , odom_child_frame_id.c_str());
+    //   geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
+    //   odom_trans.header.stamp = stamp;
+    //   odom_trans.header.frame_id = "map";
+    //   odom_trans.child_frame_id = odom_child_frame_id;
+    //   tf_broadcaster.sendTransform(odom_trans);
+    // }
 
     // publish the transform
     nav_msgs::Odometry odom;
@@ -530,12 +539,9 @@ private:
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
 
-    // tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
-    // odom.child_frame_id = odom_child_frame_id;
-    // pose_pub.publish(odom);
-
-    // printf("%f %f %f %f %f %f %f %f \n", stamp.toSec(), odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z
-    // , odom.pose.pose.orientation.x  , odom.pose.pose.orientation.y, odom.pose.pose.orientation.z, odom.pose.pose.orientation.w );
+    tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
+    odom.child_frame_id = odom_child_frame_id;
+    pose_pub.publish(odom);
 
     static std::ofstream ofs;
     ofs.open( "/home/liunao/hdl/hdl_pose.txt", std::ios::app);
@@ -549,41 +555,6 @@ private:
         << " "  << std::to_string(odom.pose.pose.orientation.w) << std::endl;
     ofs.close();
 
-    std::string tfError;
-    try
-    {      
-      if( this->tf_buffer.canTransform("map", "body" , stamp, ros::Duration(0.05), &tfError) )
-      {
-        geometry_msgs::TransformStamped body_pose_in_map = tf_buffer.lookupTransform("map", "body", stamp, ros::Duration(0.05));
-        tf::poseEigenToMsg(Eigen::Isometry3d(body_pose_in_map.cast<double>()), odom.pose.pose);
-        odom.child_frame_id = "body";
-        pose_pub.publish(odom);
-
-        static std::ofstream ofs1;
-        ofs1.open( "/home/liunao/hdl/hdl_body_pose.txt", std::ios::app);
-    
-        ofs1 << std::to_string(body_pose_in_map.header.stamp.toSec())
-            << " "  << std::to_string(body_pose_in_map.transform.translation.x)
-            << " "  << std::to_string(body_pose_in_map.transform.translation.y)
-            << " "  << std::to_string(body_pose_in_map.transform.translation.z)
-            << " "  << std::to_string(body_pose_in_map.transform.rotation.x)
-            << " "  << std::to_string(body_pose_in_map.transform.rotation.y)
-            << " "  << std::to_string(body_pose_in_map.transform.rotation.z)
-            << " "  << std::to_string(body_pose_in_map.transform.rotation.w) << std::endl;
-        ofs1.close();
-      }
-      else
-      {
-        ROS_WARN(" can not canTransform ." );
-      }
-    }
-    catch(tf::TransformException &ex)
-    {
-      ROS_WARN("%s", ex.what());
-      NODELET_ERROR(tfError.c_str());
-      return;
-    }
-    // ROS_ERROR("11");
   }
 
   /**
