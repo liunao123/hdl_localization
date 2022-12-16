@@ -45,6 +45,10 @@ private:
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
     globalmap.reset(new pcl::PointCloud<PointT>());
+    
+    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.35);
+    ROS_WARN(" voxel filter <resolution : %f >  . ", downsample_resolution );
+
     ROS_WARN("start load global map . %s ", globalmap_pcd.c_str());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
@@ -64,7 +68,7 @@ private:
     }
 
     // downsample globalmap
-    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     voxelgrid->setInputCloud(globalmap);
@@ -73,7 +77,7 @@ private:
     voxelgrid->filter(*filtered);
 
     globalmap = filtered;
-    ROS_WARN("size if global map after voxel filter: %ld . ", globalmap->points.size());
+    ROS_WARN("size if global map after voxel filter : %ld . " , globalmap->points.size());
   }
 
   void pub_once_cb(const ros::WallTimerEvent& event) {

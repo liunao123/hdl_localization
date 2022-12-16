@@ -62,7 +62,7 @@ public:
       NODELET_INFO("enable imu-based prediction");
       imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
     }
-    points_sub = mt_nh.subscribe("/velodyne_points", 5, &HdlLocalizationNodelet::points_callback, this);
+    points_sub = mt_nh.subscribe("/velodyne_points", 1, &HdlLocalizationNodelet::points_callback, this);
     globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
     initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
 
@@ -90,6 +90,7 @@ private:
     std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
     double ndt_neighbor_search_radius = private_nh.param<double>("ndt_neighbor_search_radius", 2.0);
     double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
+    NODELET_WARN("ndt_resolution is %lf", ndt_resolution);
 
     if(reg_method == "NDT_OMP") {
       NODELET_INFO("NDT_OMP is selected");
@@ -98,7 +99,8 @@ private:
       ndt->setResolution(ndt_resolution);
 
       ndt->setNumThreads(10);
-      ndt->setStepSize(0.1);
+      double ndt_setStepSize = private_nh.param<double>("ndt_stepsize", 0.1);  // 默认0.1
+      ndt->setStepSize(ndt_setStepSize);
 
       if (ndt_neighbor_search_method == "DIRECT1") {
         NODELET_INFO("search_method DIRECT1 is selected");
@@ -193,7 +195,9 @@ private:
     // if (pc_cnts++ % 2 )
     // {
     //   return ;
-    // }
+    // }      
+    
+    ros::Time s_t = ros::Time::now();
 
     std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
     if(!pose_estimator) {
@@ -269,11 +273,11 @@ private:
     }
 
     // std::cout << __FILE__ << ":" << __LINE__ << " cloud pc size is: " << cloud->points.size() << std::endl;
-    // auto filtered = downsample(cloud);
+    auto filtered = downsample(cloud);
 
     // 点云已经是提取的 surf 点，不滤波
-    auto filtered = cloud;
-    filtered->header = cloud->header;
+    // auto filtered = cloud;
+    // filtered->header = cloud->header;
     // filtered->header.frame_id = odom_child_frame_id;
     
     // std::cout << __FILE__ << ":" << __LINE__ << " filtered pc size is: " << filtered->points.size() << std::endl;
@@ -317,7 +321,23 @@ private:
     
     // ROS_INFO("pc time with now tf, TIME diff is: %f ", (stamp - last_correction_time).toSec() );
     
-    if(private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero())
+    static int cnts = 0;
+    static int no_odom_cnts = 0;
+    
+    if ( no_odom_flag )
+    {
+      ROS_WARN("no use odom a mins ");
+      if (no_odom_cnts++ > 30)
+      {
+        no_odom_cnts = 0;
+        ROS_WARN("try use odom if can .  no_odom_flag = false ");
+        no_odom_flag = false;
+      }      
+    }
+    else
+    {
+
+    if(private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero() && !no_odom_flag )
     {
       geometry_msgs::TransformStamped odom_delta;
       if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1))) {
@@ -328,15 +348,37 @@ private:
         // ROS_WARN("ros::Time(0) : pc time with now tf, TIME diff is: %f ", (stamp - odom_delta.header.stamp).toSec() );
       }
 
-      static int cnts = 0;
-      if(odom_delta.header.stamp.isZero()) {
+      if(odom_delta.header.stamp.isZero()) 
+      {
         NODELET_ERROR_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id 
           << " canTransform failed cnts:" << cnts++ );
+
+        if(cnts == 1)
+        {
+          ros::Time time_1 = ros::Time::now();
+        }
+
+        if ( cnts > 30 )
+        {
+          cnts = 0;
+          ros::Time time_30 = ros::Time::now();
+          // 短时间内发生多次
+          if ( (time_30 - time_1).toSec() < 4.0 )
+          {
+            no_odom_flag = true;
+            ROS_WARN(" cnts > 30 .no_odom_flag = true ");
+          }
+        }
+
       } else {
         Eigen::Isometry3d delta = tf2::transformToEigen(odom_delta);
         pose_estimator->predict_odom(delta.cast<float>().matrix());
       }
     }
+
+    }
+
+
 
     // correct
     auto aligned = pose_estimator->correct(stamp, filtered);
@@ -350,6 +392,9 @@ private:
     publish_scan_matching_status(points_msg->header, aligned);
 
     publish_odometry(stamp, pose_estimator->matrix());
+
+    ROS_INFO("locate use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
+
   }
 
   /**
@@ -577,7 +622,7 @@ private:
     // ROS_INFO("has_converged is %d, matching_error(getFitnessScore) is %f", status.has_converged, status.matching_error);
 
     double max_correspondence_dist = 0.3;
-    max_correspondence_dist = private_nh.param<double>("/max_correspondence_dist", 0.3);
+    max_correspondence_dist = private_nh.param<double>("max_correspondence_dist", 0.3);
 
     int num_inliers = 0;
     std::vector<int> k_indices;
@@ -679,6 +724,9 @@ private:
   ros::ServiceServer relocalize_server;
   ros::ServiceClient set_global_map_service;
   ros::ServiceClient query_global_localization_service;
+
+  bool no_odom_flag = false;
+  ros::Time time_1, time_30;
 };
 }
 
