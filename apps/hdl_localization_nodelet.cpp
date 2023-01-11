@@ -1,6 +1,7 @@
 #include <mutex>
 #include <memory>
 #include <iostream>
+#include <iomanip>
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
@@ -13,6 +14,8 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <eigen_conversions/eigen_msg.h>
+#include <tf2/convert.h>
+// #include <Eigen/Geometry.h>
 
 #include <std_msgs/Float32.h>
 #include <std_srvs/Empty.h>
@@ -64,11 +67,13 @@ public:
     points_sub = mt_nh.subscribe("/velodyne_points", 1, &HdlLocalizationNodelet::points_callback, this);
     globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
     initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
+    odom_sub = nh.subscribe("/r2live/odometry", 8, &HdlLocalizationNodelet::odom_callback, this);
 
-    pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
-    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
+    pose_pub = nh.advertise<nav_msgs::Odometry>("odom", 1, false);
+    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned_points", 1, false);
     status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
     confidence_pub = nh.advertise<std_msgs::Float32>("/confidece", 5, false);
+    string_pub = nh.advertise<std_msgs::String>("/XY_yaw", 5, false);
 
     // global localization
     use_global_localization = private_nh.param<bool>("use_global_localization", true);
@@ -183,6 +188,23 @@ private:
 
 private:
   /**
+   * @brief callback for odom pose input
+   * @param odom_msg
+   */
+  void odom_callback(const nav_msgs::OdometryConstPtr& odom_msg) {
+    // NODELET_INFO("odom_msg pose received!!");
+    std::lock_guard<std::mutex> lock(odom_data_mutex);
+    // odom_data.push_back(odom_msg);
+    odom_data.emplace_back(odom_msg);
+
+    // hdl is ok long time, this vector will  increase always. so delete some data
+    if (odom_data.size() > 30) {
+      // ROS_WARN(" odom_data.size() > 30. delete front 15 old data :");
+      odom_data.erase(odom_data.begin(), odom_data.begin() + 15);
+    }
+  }
+
+  /**
    * @brief callback for imu data
    * @param imu_msg
    */
@@ -196,7 +218,6 @@ private:
    * @param points_msg
    */
   void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg) {
-
     // static int pc_cnts = 0;
     // if (pc_cnts++ % 2) {
     //   return;
@@ -321,49 +342,26 @@ private:
     static int cnts = 0;
     static int no_odom_cnts = 0;
 
-    if (no_odom_flag) {
-      ROS_INFO("no use odom some secs . ");
-      if (no_odom_cnts++ > 30) {
-        no_odom_cnts = 0;
-        ROS_WARN("try use odom if can .  no_odom_flag = false ");
-        no_odom_flag = false;
-      }
-    }
-    else
-    {
-      if (private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero() ) {
-        geometry_msgs::TransformStamped odom_delta;
-        if (tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1))) {
-          odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1));
-          // ROS_INFO("stmap : pc time with now tf, TIME diff is: %f ", (stamp - odom_delta.header.stamp).toSec());
-        } else if (tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0.2))) {
-          odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0.2));
-          // ROS_WARN("ros::Time(0) : pc time with now tf, TIME diff is: %f ", (stamp - odom_delta.header.stamp).toSec());
-        }
-
-        if (odom_delta.header.stamp.isZero()) {
-          NODELET_ERROR_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id << " canTransform failed cnts:" << cnts++);
-            if ((ros::Time::now() - time_1).toSec() < 0.3)
-            {
-              no_odom_flag = true;
-              ROS_WARN(" lianxu 2 no odom time  < 0.4s  .no_odom_flag = true ");
-            }
-            time_1 = ros::Time::now();
-
-        } else {
-          Eigen::Isometry3d delta = tf2::transformToEigen(odom_delta);
-          pose_estimator->predict_odom(delta.cast<float>().matrix());
-        }
-      }
-      else
-      {
-        if (private_nh.param<bool>("enable_robot_odometry_prediction", false) )
-        {
-          ROS_ERROR(" enable_robot_odometry_prediction false ");
-        }
+    if (private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero()) {
+      geometry_msgs::TransformStamped odom_delta;
+      if (tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1));
+        // ROS_INFO("stmap : pc time with now tf, TIME diff is: %f ", (stamp - odom_delta.header.stamp).toSec());
+      } else if (tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0.05))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0.05));
+        // ROS_WARN("ros::Time(0) : pc time with now tf, TIME diff is: %f ", (stamp - odom_delta.header.stamp).toSec());
       }
 
-    }
+      if (odom_delta.header.stamp.isZero()) {
+        // NODELET_ERROR_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id << " canTransform failed cnts:" << cnts++);
+        // 20221226 daiti
+        Eigen::Isometry3d delta = Eigen::Isometry3d::Identity();
+        pose_estimator->predict_odom(delta.cast<float>().matrix());
+      } else {
+        Eigen::Isometry3d delta = tf2::transformToEigen(odom_delta);
+        pose_estimator->predict_odom(delta.cast<float>().matrix());
+      }
+    } 
 
     // correct
     auto aligned = pose_estimator->correct(stamp, filtered);
@@ -376,7 +374,7 @@ private:
 
     publish_scan_matching_status(points_msg->header, aligned);
 
-    publish_odometry(stamp, pose_estimator->matrix());
+    // publish_odometry(stamp, pose_estimator->matrix());
 
     // ROS_INFO("locate use time is %lf  s", ros::Time::now().toSec() - s_t.toSec());
   }
@@ -573,6 +571,35 @@ private:
     odom.child_frame_id = odom_child_frame_id;
     pose_pub.publish(odom);
 
+    // 把这个 定位成功的 位姿记录下来
+    last_odom_pose.header = odom.header;
+    last_odom_pose.pose.pose = odom.pose.pose;
+
+    // double yaw = tf2::getYaw(status.relative_pose.rotation) * 180.0 /  3.14159;
+
+    double roll, pitch, yaw;  //定义存储r\p\y的容器
+    // tf::Matrix3x3(odom.pose.pose.orientation).getRPY(roll, pitch, yaw);//进行转换
+    // yaw = yaw * 180.0 /  3.14159;
+    yaw = tf::getYaw(odom.pose.pose.orientation) * 180.0 / 3.14159;
+
+    std::ostringstream ossx;
+    ossx << setiosflags(std::ios::fixed) << std::setprecision(2) << odom.pose.pose.position.x;
+    std::string xs = ossx.str();
+
+    std::ostringstream ossy;
+    ossy << setiosflags(std::ios::fixed) << std::setprecision(2) << odom.pose.pose.position.y;
+    std::string ys = ossy.str();
+
+    std::ostringstream ossyaw;
+    ossyaw << setiosflags(std::ios::fixed) << std::setprecision(1) << yaw;
+    std::string yaws = ossyaw.str();
+
+    std_msgs::String str_temp;
+
+    str_temp.data = "x: " + xs + " y: " + ys + " yaw:" + yaws;
+    // ROS_ERROR("str_temp.data  is : %s ", str_temp.data.c_str()  );
+    string_pub.publish(str_temp);
+
     static std::ofstream ttttttt("/home/liunao/hdl/hdl_pose.txt", std::ios::out);
     static std::ofstream ofs;
     ofs.open("/home/liunao/hdl/hdl_pose.txt", std::ios::app);
@@ -613,21 +640,6 @@ private:
     confidence.data = status.inlier_fraction * 100;
     confidence_pub.publish(confidence);
 
-    // 匹配好的点<内点比例> 大于 该阈值认为 定位成功
-    float LOC_SUCCESS_THRESHLOD = 0.7;
-    LOC_SUCCESS_THRESHLOD = private_nh.param<double>("/LOC_SUCCESS_THRESHLOD", 0.7);
-    // publish_odometry(header.stamp, registration->getFinalTransformation() );
-    // if( status.inlier_fraction > LOC_SUCCESS_THRESHLOD )
-    // {
-    // }
-    // else
-    // {
-    //   ROS_WARN("inlier_fraction is<%lf> less LOC_SUCCESS_THRESHLOD : %lf .max_correspondence_dist is : %lf", status.inlier_fraction, LOC_SUCCESS_THRESHLOD,
-    //   max_correspondence_dist);
-    //   // TODO call relocate locate falied .try to call /relocate service .
-    //   return ;
-    // }
-
     status.prediction_labels.reserve(2);
     status.prediction_errors.reserve(2);
 
@@ -652,6 +664,70 @@ private:
     }
 
     status_pub.publish(status);
+
+    // 匹配好的点<内点比例> 大于 该阈值认为 定位成功
+    float LOC_SUCCESS_THRESHLOD = 0.6;
+    LOC_SUCCESS_THRESHLOD = private_nh.param<double>("/LOC_SUCCESS_THRESHLOD", LOC_SUCCESS_THRESHLOD);
+
+    // ROS_WARN(" status.inlier_fraction %lf ", status.inlier_fraction);
+    if (status.inlier_fraction > LOC_SUCCESS_THRESHLOD) {
+      // ROS_WARN(" publish_odometry ");
+      publish_odometry(header.stamp, registration->getFinalTransformation());
+    } else {
+
+      static int hdl_fail_cnts = 0;
+      hdl_fail_cnts++;
+      Eigen::Isometry3d PoseDelta = Eigen::Isometry3d::Identity();
+
+      static int odom_interlp_ok_cnts = 0;
+
+      double last_time = last_odom_pose.header.stamp.toSec();
+
+      geometry_msgs::TransformStamped odom_delta;
+
+      if (tf_buffer.canTransform(odom_child_frame_id,last_odom_pose.header.stamp , odom_child_frame_id, header.stamp , robot_odom_frame_id, ros::Duration(0.1))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_odom_pose.header.stamp, odom_child_frame_id, header.stamp  , robot_odom_frame_id, ros::Duration(0.1));
+        PoseDelta = tf2::transformToEigen(odom_delta);
+      }
+      else
+      {
+        // odom_delta.transform.translation.x = last_odom_pose.twist.twist.linear.x * 0.2 ;
+        // odom_delta.transform.translation.y = last_odom_pose.twist.twist.linear.y * 0.2 ;
+        // odom_delta.transform.translation.z = last_odom_pose.twist.twist.linear.z * 0.2 ;
+        // PoseDelta = tf2::transformToEigen(odom_delta);
+        ROS_ERROR(" can not interlp-------------- ");
+        return;
+      }
+
+      ++odom_interlp_ok_cnts;
+
+      ROS_INFO(" hdl_fail_cnts %ld, odom_interlp_ok_cnts: %ld. ,precent: %lf", hdl_fail_cnts, odom_interlp_ok_cnts, (1.0*odom_interlp_ok_cnts) / (1.0*hdl_fail_cnts) );
+
+      nav_msgs::Odometry odom;
+      odom.header.stamp = header.stamp;
+      odom.header.frame_id = "map";
+      // odom.twist.twist.linear.x = 0.0;
+      // odom.twist.twist.linear.y = 0.0;
+      // odom.twist.twist.angular.z = 0.0;
+
+      Eigen::Isometry3d last_pose_eigen;
+      tf2::fromMsg(last_odom_pose.pose.pose, last_pose_eigen);
+
+      Eigen::Isometry3d now_pose_eigen;
+      now_pose_eigen = PoseDelta * last_pose_eigen;
+
+      tf::poseEigenToMsg(Eigen::Isometry3d(now_pose_eigen.cast<double>()), odom.pose.pose);
+      odom.child_frame_id = odom_child_frame_id;
+
+      // record now odom data
+      last_odom_pose.header = odom.header;
+      last_odom_pose.pose.pose = odom.pose.pose;
+      // last_odom_pose.twist.twist = odom.twist.twist;
+      
+      pose_pub.publish(odom);
+
+      // ROS_ERROR_STREAM("pose delta: " << PoseDelta.matrix() << std::endl);
+    }
   }
 
 private:
@@ -670,11 +746,13 @@ private:
   ros::Subscriber points_sub;
   ros::Subscriber globalmap_sub;
   ros::Subscriber initialpose_sub;
+  ros::Subscriber odom_sub;
 
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
   ros::Publisher status_pub;
   ros::Publisher confidence_pub;
+  ros::Publisher string_pub;
 
   tf2_ros::Buffer tf_buffer;
   tf2_ros::TransformListener tf_listener;
@@ -705,6 +783,13 @@ private:
 
   bool no_odom_flag;
   ros::Time time_1, time_30;
+
+  // odom input buffer
+  std::mutex odom_data_mutex;
+  std::vector<nav_msgs::OdometryConstPtr> odom_data;
+  // geometry_msgs::PoseStamped last_odom_pose;
+  nav_msgs::Odometry last_odom_pose;
+
 };
 }  // namespace hdl_localization
 
