@@ -5,8 +5,9 @@
 
   <!-- arguments -->
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
-  <!-- <arg name="points_topic" default="/rslidar_points" /> -->
-  <arg name="points_topic" default="/velodyne_points" />
+  <arg name="points_topic" default="/laser_cloud_flat" />
+  <!-- <arg name="points_topic" default="/livox_surf_point" /> -->
+  <!-- <arg name="points_topic" default="/cloud_registered" /> -->
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
   <arg name="odom_child_frame_id" default="imu" />
@@ -24,18 +25,21 @@
 
   <arg name="plot_estimation_errors" value="false" />
 
-  <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
-
-  <!-- livox 雷达 imu 与 激光的相对位置 -->
-  <!-- V2 -->
-  <node pkg="tf" type="static_transform_publisher" name="tf_imu_velody" args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu velodyne  100"/>
-  <node pkg="tf" type="static_transform_publisher" name="tf_imu_livox"  args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu livox  100"/> 
+  <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
 
+    <!-- globalmap_server_nodelet -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/300m_r2live.pcd" /> -->
+    <!-- <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" output="screen" args="standalone  hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/r2live_1200m.pcd" />
+      <param name="convert_utm_to_local" value="false" />
+      <param name="downsample_resolution" value="0.2" />
+  </node> -->
+
     <!-- hdl_localization_nodelet -->
-    <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+    <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
       <remap from="/velodyne_points" to="$(arg points_topic)" />
       <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
       <!-- odometry frame_id -->
@@ -55,29 +59,22 @@
       <!-- if NDT is slow for your PC, try DIRECT1 serach method, which is a bit unstable but extremely fast -->
       <param name="ndt_neighbor_search_method" value="DIRECT7" />
 
-      <param name="ndt_neighbor_search_radius" value="1.0" />
-      <!-- <param name="ndt_resolution" value="0.5" />
+      <!-- <param name="ndt_neighbor_search_radius" value="1.0" />
+      <param name="ndt_resolution" value="0.5" />
       <param name="downsample_resolution" value="0.05" />
 
       <param name="max_correspondence_dist" value="0.15" />
       <param name="LOC_SUCCESS_THRESHLOD" value="0.6" /> -->
-<!--
-      <param name="ndt_neighbor_search_radius" value="0.45" />   0.45 less 0.5 -->
-      
 
-      <!-- 越大，远处的点 所占比重越大，定位越准确 --><!-- 
-      <param name="downsample_resolution" value="0.2" />  0.25 is ok 
-      <param name="max_correspondence_dist" value="0.15" /> -->   <!--
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.0" />     
-      <param name="ndt_resolution" value="0.75" />  0.2  0.3~0.5 
-      <param name="ndt_stepsize" value="0.2" />  -->
-      <!-- 以上参数不动，坑道外定位测试效果良好 -->
+      <param name="ndt_neighbor_search_radius" value="0.45" /> <!--  less 0.5 -->
+      <param name="ndt_resolution" value="0.3" /> <!-- 0.3~0.5 -->
 
-      <param name="downsample_resolution" value="0.2" />  <!-- 0.25 is ok -->
-      <param name="max_correspondence_dist" value="0.25" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.4" />      
-      <param name="ndt_resolution" value="0.5" /> <!-- 0.2  0.3~0.5 -->
-      <param name="ndt_stepsize" value="0.2" />
+      <!-- 越大，远处的点 所占比重越大，定位越准确 -->
+      <param name="downsample_resolution" value="0.275" />  <!-- 0.25 is ok -->
+
+      <param name="max_correspondence_dist" value="0.05" />
+
+      <param name="LOC_SUCCESS_THRESHLOD" value="0.7" />
 
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
       <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
@@ -89,6 +86,25 @@
       <param name="init_ori_y" value="0.0" />
       <param name="init_ori_z" value="0.0" />
       <param name="init_ori_w" value="1.0" />
+
+      <!-- -s 320 -->
+      <!-- <param name="init_pos_x" value="321.303833" />
+      <param name="init_pos_y" value="259.352386" />
+      <param name="init_pos_z" value="-5.665429" />
+      <param name="init_ori_x" value="-0.002725" />
+      <param name="init_ori_y" value="0.017923" />
+      <param name="init_ori_z" value="0.300395" />    
+      <param name="init_ori_w" value="0.953643" /> -->
+
+      <!-- -s 220 -->
+      <!-- <param name="init_pos_x" value="213.937238" />
+      <param name="init_pos_y" value="181.737000" />
+      <param name="init_pos_z" value="-13.688529" />
+      <param name="init_ori_x" value="0.001507" />
+      <param name="init_ori_y" value="0.013016" />
+      <param name="init_ori_z" value="0.457061" /> 
+      <param name="init_ori_w" value="0.889339" />       -->
+      
 
       <param name="use_global_localization" value="$(arg use_global_localization)" />
     </node>

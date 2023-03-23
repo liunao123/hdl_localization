@@ -2,16 +2,48 @@
 <launch>
 
   <param name="use_sim_time" value="true" />
+  <arg name="nodelet_manager" default="velodyne_nodelet_manager_globalmap" />
 
-  <arg name="use_global_localization" default="true" />
+  <!-- <arg name="use_global_localization" default="true" /> -->
 
   <!-- 全局定位：暂时不适用于livox -->
-  <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
+  <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
 
   <!-- ukf 定位 -->
-  <include file="$(find hdl_localization)/launch/hdl_localization.launch" />
+  <!-- <include file="$(find hdl_localization)/launch/hdl_localization.launch" /> -->
 
   <!-- 平面特征点提取 -->
-  <include file="$(find r2live)/launch/get_surf_points.launch" />
+  <!-- <include file="$(find r2live)/launch/get_surf_points.launch" /> -->
+
+
+  <!-- in case you use velodyne_driver, comment out the following line -->
+  <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
+
+    <!-- globalmap_server_nodelet -->
+    <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/300m_r2live.pcd" /> -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/r2live_1200m.pcd" /> -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/xn_s1310_1150m.pcd" /> -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/Save_cloud_registered_original_r2live.pcd" />       -->
+
+      <!-- 坑道外 -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/2023-02-22-09-41-50_Save_cloud_registered_10_no_che.pcd" /> -->
+
+      <!-- 坑道内 v1 水平 -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v1/2023-03-02-17-07-24_Save_cloud_registered_10.pcd" /> -->
+
+      <!-- 坑道内 v2 水平 -->
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-02-17-13-40-34_Save_cloud_registered_10_che_horizontal.pcd" /> 
+
+
+      <!-- 园区 -->
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/test_pcd_30_cm_horizontal.pcd" /> 
+
+      <param name="convert_utm_to_local" value="false" />
+      <param name="downsample_resolution" value="0.1" />
+      
+  </node>
+
+  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="screen" respawn="true" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
 
 </launch>
