@@ -249,14 +249,21 @@ private:
     }
     
     // ROS_WARN(" pc size() %d ", pcl_cloud->size());
-    static const float range = 1.0;
-    pcl::CropBox< PointT > cropBoxFilter (true);
+    float range = 1.0;
+    static pcl::CropBox< PointT > cropBoxFilter (true);
     cropBoxFilter.setInputCloud (pcl_cloud);
     cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -range, 1.0f));
     cropBoxFilter.setMax (Eigen::Vector4f  (range, range, range, 1.0f));
     cropBoxFilter.setNegative(true);
     cropBoxFilter.filter (*pcl_cloud);
     // ROS_WARN(" pc size() %d ", pcl_cloud->size());
+
+    range = 100.0;
+    cropBoxFilter.setInputCloud (pcl_cloud);
+    cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -0.2, 1.0f));
+    cropBoxFilter.setMax (Eigen::Vector4f  (range, range, 3.0, 1.0f));
+    cropBoxFilter.setNegative(true);
+    cropBoxFilter.filter (*pcl_cloud);
 
     // transform pointcloud into odom_child_frame_id
     std::string tfError;
@@ -693,6 +700,11 @@ private:
     }
     else 
     {
+      if (! private_nh.param<bool>("enable_robot_odometry_prediction", false) ) 
+      {
+        ROS_WARN(" enable_robot_odometry_prediction  false ");
+        return;
+      }
       static int hdl_fail_cnts = 0;
       hdl_fail_cnts++;
       Eigen::Isometry3d PoseDelta = Eigen::Isometry3d::Identity();

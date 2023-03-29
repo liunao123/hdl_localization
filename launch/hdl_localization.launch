@@ -61,8 +61,8 @@
 
       <param name="max_correspondence_dist" value="0.15" />
       <param name="LOC_SUCCESS_THRESHLOD" value="0.6" /> -->
-<!--
-      <param name="ndt_neighbor_search_radius" value="0.45" />   0.45 less 0.5 -->
+
+      <!-- <param name="ndt_neighbor_search_radius" value="0.45" />   0.45 less 0.5 -->
       
 
       <!-- 越大，远处的点 所占比重越大，定位越准确 --><!-- 
@@ -73,10 +73,18 @@
       <param name="ndt_stepsize" value="0.2" />  -->
       <!-- 以上参数不动，坑道外定位测试效果良好 -->
 
-      <param name="downsample_resolution" value="0.2" />  <!-- 0.25 is ok -->
-      <param name="max_correspondence_dist" value="0.25" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.4" />      
-      <param name="ndt_resolution" value="0.5" /> <!-- 0.2  0.3~0.5 -->
+      <!-- 园区测试效果良好 -->  <!-- 0.25 is ok -->
+      <!-- <param name="downsample_resolution" value="0.3" />  
+      <param name="max_correspondence_dist" value="0.3" /> 
+      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" />      
+      <param name="ndt_stepsize" value="0.3" />
+      <param name="ndt_resolution" value="1.0" />       -->
+
+      <!-- 江杨北路 -->
+      <param name="downsample_resolution" value="0.3" />  <!-- 0.25 is ok -->
+      <param name="max_correspondence_dist" value="0.2" /> 
+      <param name="LOC_SUCCESS_THRESHLOD" value="0.0" />      
+      <param name="ndt_resolution" value="0.80" /> <!-- 0.2  0.3~0.5 -->
       <param name="ndt_stepsize" value="0.2" />
 
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->

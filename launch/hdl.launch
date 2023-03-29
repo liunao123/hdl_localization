@@ -33,17 +33,22 @@
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v1/2023-03-02-17-07-24_Save_cloud_registered_10.pcd" /> -->
 
       <!-- 坑道内 v2 水平 -->
-      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-02-17-13-40-34_Save_cloud_registered_10_che_horizontal.pcd" /> 
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-02-17-13-40-34_Save_cloud_registered_10_che_horizontal.pcd" />  -->
 
 
       <!-- 园区 -->
-      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/test_pcd_30_cm_horizontal.pcd" /> 
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v2_test_pcd_30_cm.pcd" />
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v1_yuanqu.pcd" />  -->
 
+      <!-- 江杨北路 -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-03-16-10-06-51_10cm.pcd" /> -->
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-03-16-14-00-42_10cm.pcd" />
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/ok_2.pcd" /> -->
       <param name="convert_utm_to_local" value="false" />
-      <param name="downsample_resolution" value="0.1" />
+      <param name="downsample_resolution" value="0.2" />
       
   </node>
 
-  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="screen" respawn="true" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
+  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="screen" respawn="false" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
 
 </launch>
