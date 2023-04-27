@@ -260,7 +260,7 @@ private:
 
     range = 100.0;
     cropBoxFilter.setInputCloud (pcl_cloud);
-    cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -0.2, 1.0f));
+    cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -0.1, 1.0f));
     cropBoxFilter.setMax (Eigen::Vector4f  (range, range, 3.0, 1.0f));
     cropBoxFilter.setNegative(true);
     cropBoxFilter.filter (*pcl_cloud);

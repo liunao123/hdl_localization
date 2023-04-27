@@ -72,7 +72,7 @@
       <!-- 越大，远处的点 所占比重越大，定位越准确 -->
       <param name="downsample_resolution" value="0.275" />  <!-- 0.25 is ok -->
 
-      <param name="max_correspondence_dist" value="0.05" />
+      <param name="max_correspondence_dist" value="0.1" />
 
       <param name="LOC_SUCCESS_THRESHLOD" value="0.7" />
 

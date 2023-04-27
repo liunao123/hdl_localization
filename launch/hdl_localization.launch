@@ -5,8 +5,9 @@
 
   <!-- arguments -->
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
-  <!-- <arg name="points_topic" default="/rslidar_points" /> -->
-  <arg name="points_topic" default="/velodyne_points" />
+  <arg name="points_topic" default="/rslidar_points" />
+  <!-- <arg name="points_topic" default="/velodyne_points" /> -->
+
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
   <arg name="odom_child_frame_id" default="imu" />
@@ -24,16 +25,9 @@
 
   <arg name="plot_estimation_errors" value="false" />
 
-  <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
-
-  <!-- livox 雷达 imu 与 激光的相对位置 -->
-  <!-- V2 -->
-  <node pkg="tf" type="static_transform_publisher" name="tf_imu_velody" args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu velodyne  100"/>
-  <node pkg="tf" type="static_transform_publisher" name="tf_imu_livox"  args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu livox  100"/> 
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
-
     <!-- hdl_localization_nodelet -->
     <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
       <remap from="/velodyne_points" to="$(arg points_topic)" />
@@ -74,18 +68,18 @@
       <!-- 以上参数不动，坑道外定位测试效果良好 -->
 
       <!-- 园区测试效果良好 -->  <!-- 0.25 is ok -->
-      <!-- <param name="downsample_resolution" value="0.3" />  
-      <param name="max_correspondence_dist" value="0.3" /> 
+      <param name="downsample_resolution" value="0.3" />  
+      <param name="max_correspondence_dist" value="0.4" /> 
       <param name="LOC_SUCCESS_THRESHLOD" value="0.6" />      
       <param name="ndt_stepsize" value="0.3" />
-      <param name="ndt_resolution" value="1.0" />       -->
+      <param name="ndt_resolution" value="1.0" />      
 
       <!-- 江杨北路 -->
-      <param name="downsample_resolution" value="0.3" />  <!-- 0.25 is ok -->
-      <param name="max_correspondence_dist" value="0.2" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.0" />      
-      <param name="ndt_resolution" value="0.80" /> <!-- 0.2  0.3~0.5 -->
-      <param name="ndt_stepsize" value="0.2" />
+      <!-- <param name="downsample_resolution" value="0.2" />   
+      <param name="max_correspondence_dist" value="0.3" /> 
+      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" /> -->
+     <!-- <param name="ndt_stepsize" value="0.2" />     //  0.2  0.3~0.5  0.25 -->
+     <!-- <param name="ndt_resolution" value="1.20" />  //  0.2  0.3~0.5  1.0 -->
 
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
       <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
@@ -103,6 +97,20 @@
 
     <!-- <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors" if="$(arg plot_estimation_errors)" /> -->
 
-    <!-- <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="log" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" /> -->
+    <!-- 全局重定位，未测试 -->
+    <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
+
+    <!-- 是否使用里程计，内部通过 TF 实现的 -->
+	  <group if="$(arg enable_robot_odometry_prediction)">
+      <include file="$(find fast_livo)/launch/mapping_v2.launch" />
+	  </group>
+
+    <!-- 加载全局点云地图 -->
+    <include file="$(find hdl_localization)/launch/load_global_map.launch" />
+
+    <!--  imu 与 lidar 的相对位置 -->
+    <!-- V2 -->
+    <node pkg="tf" type="static_transform_publisher" name="tf_imu_velody" args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu velodyne  100"/>
+    <!-- <node pkg="tf" type="static_transform_publisher" name="tf_imu_livox"  args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu livox  100"/>  -->
 
 </launch>

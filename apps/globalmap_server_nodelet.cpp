@@ -49,7 +49,7 @@ private:
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.35);
     ROS_WARN(" voxel filter <resolution : %f >  . ", downsample_resolution );
 
-    ROS_WARN("start load global map . %s ", globalmap_pcd.c_str());
+    ROS_WARN("start load global map : %s ", globalmap_pcd.c_str());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
 

@@ -4,7 +4,7 @@
   <param name="use_sim_time" value="true" />
   <arg name="nodelet_manager" default="velodyne_nodelet_manager_globalmap" />
 
-  <!-- <arg name="use_global_localization" default="true" /> -->
+  <arg name="use_global_localization" default="true" />
 
   <!-- 全局定位：暂时不适用于livox -->
   <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
@@ -26,9 +26,9 @@
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/xn_s1310_1150m.pcd" /> -->
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/Save_cloud_registered_original_r2live.pcd" />       -->
 
-      <!-- 坑道外 -->
-      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/2023-02-22-09-41-50_Save_cloud_registered_10_no_che.pcd" /> -->
-
+      <!-- 坑道外 
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-02-22-09-41-50_Save_cloud_registered_10_no_che.pcd" />
+       -->
       <!-- 坑道内 v1 水平 -->
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v1/2023-03-02-17-07-24_Save_cloud_registered_10.pcd" /> -->
 
@@ -37,15 +37,24 @@
 
 
       <!-- 园区 -->
-      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v2_test_pcd_30_cm.pcd" />
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v2_test_pcd_30_cm.pcd" /> -->
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v1_yuanqu.pcd" />  -->
 
       <!-- 江杨北路 -->
-      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-03-16-10-06-51_10cm.pcd" /> -->
-      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-03-16-14-00-42_10cm.pcd" />
-      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/ok_2.pcd" /> -->
+      <!-- v2 -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/jiangyang_beilu/v2/2023-03-16-10-06-51_10cm.pcd" /> -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/jiangyang_beilu/v2/2023-03-16-14-00-42_10cm.pcd" /> -->
+
+      <!-- v1 -->
+      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/jiangyang_beilu/v1/2023-03-27-15-44-57_r2live_v1_10cm_horizontal_removed_che.pcd" />
+
+      <!-- 河北雄安 管廊 -->
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/xiongan/xiongan_r2live_1200m.pcd" />  -->
+
       <param name="convert_utm_to_local" value="false" />
-      <param name="downsample_resolution" value="0.2" />
+      <param name="downsample_resolution" value="0.3" />
+
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/sh_st/v2/2023-02-22-09-41-50_Save_cloud_registered_10_no_che.pcd" />  -->
       
   </node>
 
