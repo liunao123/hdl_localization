@@ -41,6 +41,10 @@
 #include <hdl_global_localization/SetGlobalMap.h>
 #include <hdl_global_localization/QueryGlobalLocalization.h>
 
+#include<base_controller/csgPoseStampedMatchValue.h>
+
+
+
 namespace hdl_localization {
 
 class HdlLocalizationNodelet : public nodelet::Nodelet {
@@ -77,6 +81,8 @@ public:
     status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
     confidence_pub = nh.advertise<std_msgs::Float32>("/confidece", 5, false);
     string_pub = nh.advertise<std_msgs::String>("/XY_yaw", 5, false);
+    current_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/current_pose", 5);
+    keda_current_pub= nh.advertise<base_controller::csgPoseStampedMatchValue>("/keda_current_pose", 5);
 
     // global localization
     use_global_localization = private_nh.param<bool>("use_global_localization", true);
@@ -269,11 +275,6 @@ private:
     std::string tfError;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
 
-    // 转换失败，直接跳过
-    // 不用里程计，直接用livox的frame
-    // modify by ln 20221122
-    // *cloud = *pcl_cloud;
-    /*         */
     try {
       if (this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.05), &tfError)) {
         if (!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
@@ -291,21 +292,6 @@ private:
       return;
     }
 
-    // 手动 从livox 转到body 坐标系下
-    // cloud->points.clear();
-    // cloud->points.resize( pcl_cloud->points.size() );
-
-    // cloud->header.frame_id = odom_child_frame_id;
-    // cloud->header.stamp = pcl_cloud->header.stamp;
-
-    // static const Eigen::Vector3d Lidar_offset_to_IMU(0.05512, 0.02226, 0.0297); // Horizon
-
-    // for(int i=0; i < pcl_cloud->points.size() ; i++)
-    // {
-    //   cloud->points[i].x = pcl_cloud->points[i].x + Lidar_offset_to_IMU[0];
-    //   cloud->points[i].y = pcl_cloud->points[i].y + Lidar_offset_to_IMU[1];
-    //   cloud->points[i].z = pcl_cloud->points[i].z + Lidar_offset_to_IMU[2];
-    // }
 
     if (cloud->header.frame_id.empty()) {
       ROS_ERROR("cloud->header.frame_id.is empty, shoule be %s . ", odom_child_frame_id.c_str());
@@ -516,7 +502,7 @@ private:
    * @param stamp  timestamp
    * @param pose   odometry pose to be published
    */
-  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
+  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double MatchValue) {
     // broadcast the transform over tf
     if (tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
       /*      */
@@ -592,6 +578,22 @@ private:
     odom.child_frame_id = odom_child_frame_id;
     pose_pub.publish(odom);
 
+    // pub current pose and pose with match value    
+    geometry_msgs::PoseStamped current_pose;
+    current_pose.header = odom.header;
+    current_pose.pose = odom.pose.pose;
+    current_pose_pub.publish(current_pose);
+    
+    base_controller::csgPoseStampedMatchValue cpm;
+    cpm.header = odom.header;
+    cpm.pose = current_pose.pose;
+    cpm.match_value = MatchValue;
+
+    // 暂定
+    cpm.iRegionID = 1;
+    cpm.iMapID = 2;
+    keda_current_pub.publish(cpm);
+
     // 把这个 定位成功的 位姿记录下来
     last_odom_pose.header = odom.header;
     last_odom_pose.pose.pose = odom.pose.pose;
@@ -621,9 +623,9 @@ private:
     // ROS_ERROR("str_temp.data  is : %s ", str_temp.data.c_str()  );
     string_pub.publish(str_temp);
 
-    static std::ofstream ttttttt("/home/liunao/hdl/hdl_pose.txt", std::ios::out);
+    static std::ofstream ttttttt("/home/map/hdl_pose.txt", std::ios::out);
     static std::ofstream ofs;
-    ofs.open("/home/liunao/hdl/hdl_pose.txt", std::ios::app);
+    ofs.open("/home/map/hdl_pose.txt", std::ios::app);
     ofs << std::to_string(stamp.toSec()) << " " << std::to_string(odom.pose.pose.position.x) << " " << std::to_string(odom.pose.pose.position.y) << " "
         << std::to_string(odom.pose.pose.position.z) << " " << std::to_string(odom.pose.pose.orientation.x) << " " << std::to_string(odom.pose.pose.orientation.y) << " "
         << std::to_string(odom.pose.pose.orientation.z) << " " << std::to_string(odom.pose.pose.orientation.w) << std::endl;
@@ -639,7 +641,8 @@ private:
 
     status.has_converged = registration->hasConverged();
     status.matching_error = registration->getFitnessScore();
-    // ROS_INFO("has_converged is %d, matching_error(getFitnessScore) is %f", status.has_converged, status.matching_error);
+    if( !status.has_converged )
+      ROS_ERROR("has_converged is %d, matching_error(getFitnessScore) is %f", status.has_converged, status.matching_error);
 
     double max_correspondence_dist = 0.1;
     max_correspondence_dist = private_nh.param<double>("max_correspondence_dist", 0.1);
@@ -695,8 +698,7 @@ private:
     if (status.inlier_fraction > LOC_SUCCESS_THRESHLOD) 
     // if ( 1 ) 
     {
-      // ROS_WARN(" publish_odometry ");
-      publish_odometry(header.stamp, registration->getFinalTransformation());
+      publish_odometry(header.stamp, registration->getFinalTransformation(), status.inlier_fraction );
     }
     else 
     {
@@ -710,14 +712,11 @@ private:
       Eigen::Isometry3d PoseDelta = Eigen::Isometry3d::Identity();
 
       static int odom_interlp_ok_cnts = 0;
-
-      // double last_time = last_odom_pose.header.stamp.toSec();
-
       geometry_msgs::TransformStamped odom_delta;
 
       // 时间戳调转一下
-      if (tf_buffer.canTransform(odom_child_frame_id, header.stamp , odom_child_frame_id, last_odom_pose.header.stamp , robot_odom_frame_id, ros::Duration(0.05))) {
-        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, header.stamp, odom_child_frame_id, last_odom_pose.header.stamp  , robot_odom_frame_id, ros::Duration(0.05));
+      if (tf_buffer.canTransform(odom_child_frame_id, header.stamp , odom_child_frame_id, last_odom_pose.header.stamp , robot_odom_frame_id, ros::Duration(0.1))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, header.stamp, odom_child_frame_id, last_odom_pose.header.stamp  , robot_odom_frame_id, ros::Duration(0.1));
         PoseDelta = tf2::transformToEigen( odom_delta ).inverse() ;
         ROS_ERROR_STREAM("pose delta: " << std::endl << PoseDelta.matrix() << std::endl);
       }
@@ -727,7 +726,7 @@ private:
         // odom_delta.transform.translation.y = last_odom_pose.twist.twist.linear.y * 0.2 ;
         // odom_delta.transform.translation.z = last_odom_pose.twist.twist.linear.z * 0.2 ;
         // PoseDelta = tf2::transformToEigen(odom_delta);
-        ROS_ERROR(" can not interlp-------------- ");
+        ROS_ERROR(" can not interlp with odom ...... ");
         return;
       }
 
@@ -738,9 +737,6 @@ private:
       nav_msgs::Odometry odom;
       odom.header.stamp = header.stamp;
       odom.header.frame_id = "map";
-      // odom.twist.twist.linear.x = 0.0;
-      // odom.twist.twist.linear.y = 0.0;
-      // odom.twist.twist.angular.z = 0.0;
 
       Eigen::Isometry3d last_pose_eigen;
       tf2::fromMsg(last_odom_pose.pose.pose, last_pose_eigen);
@@ -749,47 +745,34 @@ private:
       // now_pose_eigen = PoseDelta * last_pose_eigen;
       // publish_odometry(header.stamp, now_pose_eigen.matrix().cast<float>());
       now_pose_eigen = last_pose_eigen * PoseDelta;
-      publish_odometry(header.stamp, now_pose_eigen.matrix().cast<float>());
 
-      //TODO 里程计补偿的 位姿上，匹配度有多少  大于hdl的匹配度，再决定用哪个位姿 ？
-      
-      // // Executing the transformation
-      // pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_cloud_o (new pcl::PointCloud<pcl::PointXYZI> ());
-      // pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZI> ());
+      //TODO 里程计补偿的 位姿上，匹配度有多少  大于hdl的匹配度，再决定用哪个位姿 ？test DONE at 20230427
+      // Executing the transformation
+      pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZI> ());
 
-      // pcl::transformPointCloud (*aligned, *transformed_cloud_o, registration->getFinalTransformation().inverse() );
-      // pcl::transformPointCloud (*transformed_cloud_o, *transformed_cloud, now_pose_eigen.matrix());      
-      
-      // sensor_msgs::PointCloud2 output_msg;
-      // pcl::toROSMsg(*transformed_cloud, output_msg);
-      // output_msg.header.frame_id="map";
-      // output_msg.header.stamp = header.stamp;
-      // aligned_pub.publish(output_msg);
+      // 把当前点云 按补偿后的 位姿 投影到地图中，然后查找，看匹配 哪个高一些
+      pcl::transformPointCloud (*last_scan, *transformed_cloud, now_pose_eigen.matrix());      
 
-      // num_inliers = 0;
-      // for (int i = 0; i < transformed_cloud->size(); i++) {
-      // const auto& pt = transformed_cloud->at(i);
-      // registration->getSearchMethodTarget()->nearestKSearch(pt, 1, k_indices, k_sq_dists);
-      // if (k_sq_dists[0] < max_correspondence_dist * max_correspondence_dist) {
-      //   num_inliers++;
-      // }
-      // }
-      // double now_inlier_fraction = static_cast<float>(num_inliers) / transformed_cloud->size();
-      // ROS_INFO("now_inlier_fraction %f ", now_inlier_fraction);
-/*
-      tf::poseEigenToMsg(Eigen::Isometry3d(now_pose_eigen.cast<double>()), odom.pose.pose);
-      odom.child_frame_id = odom_child_frame_id;
+      num_inliers = 0;
+      for (int i = 0; i < transformed_cloud->size(); i++) {
+      const auto& pt = transformed_cloud->at(i);
+      registration->getSearchMethodTarget()->nearestKSearch(pt, 1, k_indices, k_sq_dists);
+      if (k_sq_dists[0] < max_correspondence_dist * max_correspondence_dist) {
+        num_inliers++;
+      }
+      }
+      double compensate_inlier_fraction = static_cast<float>(num_inliers) / transformed_cloud->size();
+      ROS_ERROR("old fraction is  %lf,  compensate_inlier_fraction_with_odom %lf ", status.inlier_fraction , compensate_inlier_fraction );
 
-      // record now odom data
-      last_odom_pose.header = odom.header;
-      last_odom_pose.pose.pose = odom.pose.pose;
-      // last_odom_pose.twist.twist = odom.twist.twist;
-      
-      pose_pub.publish(odom);
+      // 哪个 匹配度 高 发布哪一个
+      // ! 如何 此时的里程计是 准确的，那么 补偿后的 匹配度会更高
+      if( compensate_inlier_fraction > status.inlier_fraction )
+        publish_odometry(header.stamp, now_pose_eigen.matrix().cast<float>(), compensate_inlier_fraction); //发布用里程计补偿的位姿
+      else
+        publish_odometry(header.stamp, registration->getFinalTransformation(), status.inlier_fraction );   //还用老的位姿
 
-*/
-      // ROS_ERROR_STREAM("pose delta: " << PoseDelta.matrix() << std::endl);
     }
+
   }
 
 private:
@@ -815,6 +798,8 @@ private:
   ros::Publisher status_pub;
   ros::Publisher confidence_pub;
   ros::Publisher string_pub;
+  ros::Publisher current_pose_pub;
+  ros::Publisher keda_current_pub;
 
   tf2_ros::Buffer tf_buffer;
   tf2_ros::TransformListener tf_listener;
