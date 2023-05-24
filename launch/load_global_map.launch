@@ -11,11 +11,12 @@
     <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
       <!-- 园区 -->
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v2_test_pcd_30_cm.pcd" /> -->
-      <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v1_yuanqu.pcd" /> 
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v1_yuanqu.pcd" />  -->
+      <param name="globalmap_pcd" value="/home/map/sys_10cm.pcd" /> 
       <param name="convert_utm_to_local" value="false" />
-      <param name="downsample_resolution" value="0.2" />
+      <param name="downsample_resolution" value="0.1" />
   </node>
 
-  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="screen" respawn="false" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
+  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="log" respawn="true" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
 
 </launch>

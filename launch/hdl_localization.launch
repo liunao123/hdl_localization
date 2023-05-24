@@ -6,7 +6,8 @@
   <!-- arguments -->
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="points_topic" default="/rslidar_points" />
-  <!-- <arg name="points_topic" default="/velodyne_points" /> -->
+  <!-- <arg name="points_topic" default="/undis_pc" /> -->
+  <!-- <arg name="points_topic" default="/lio_sam/deskew/cloud_deskewed" /> -->
 
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
@@ -20,7 +21,7 @@
   <arg name="use_imu" default="true" />
   <arg name="invert_imu_acc" default="false" />
   <arg name="invert_imu_gyro" default="false" />
-  <arg name="use_global_localization" default="true" />
+  <arg name="use_global_localization" default="false" />
   <arg name="imu_topic" default="/livox/imu" />
 
   <arg name="plot_estimation_errors" value="false" />
@@ -32,6 +33,8 @@
     <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
       <remap from="/velodyne_points" to="$(arg points_topic)" />
       <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
+      <remap from="aligned_points" to="/csg_fixed_laser" />
+
       <!-- odometry frame_id -->
       <param name="odom_child_frame_id" value="$(arg odom_child_frame_id)" />
       <!-- imu settings -->
@@ -68,11 +71,11 @@
       <!-- 以上参数不动，坑道外定位测试效果良好 -->
 
       <!-- 园区测试效果良好 -->  <!-- 0.25 is ok -->
-      <param name="downsample_resolution" value="0.3" />  
-      <param name="max_correspondence_dist" value="0.4" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" />      
+      <!-- <param name="downsample_resolution" value="0.3" />  
+      <param name="max_correspondence_dist" value="0.3" /> 
+      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" />
       <param name="ndt_stepsize" value="0.3" />
-      <param name="ndt_resolution" value="1.0" />      
+      <param name="ndt_resolution" value="1.0" /> -->
 
       <!-- 江杨北路 -->
       <!-- <param name="downsample_resolution" value="0.2" />   
@@ -80,6 +83,13 @@
       <param name="LOC_SUCCESS_THRESHLOD" value="0.6" /> -->
      <!-- <param name="ndt_stepsize" value="0.2" />     //  0.2  0.3~0.5  0.25 -->
      <!-- <param name="ndt_resolution" value="1.20" />  //  0.2  0.3~0.5  1.0 -->
+
+      <!-- liejian at sys -->  <!-- 0.25 is ok -->
+      <param name="downsample_resolution" value="0.1" />  
+      <param name="max_correspondence_dist" value="0.075" /> 
+      <param name="LOC_SUCCESS_THRESHLOD" value="0.7" />
+      <param name="ndt_stepsize" value="0.1" />
+      <param name="ndt_resolution" value="0.50" />
 
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
       <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
@@ -102,15 +112,20 @@
 
     <!-- 是否使用里程计，内部通过 TF 实现的 -->
 	  <group if="$(arg enable_robot_odometry_prediction)">
-      <include file="$(find fast_livo)/launch/mapping_v2.launch" />
+      <!-- <include file="$(find fast_livo)/launch/mapping_v2_locate.launch" /> -->
+      <include file="$(find fast_livo)/launch/mapping_v2_liejian.launch" />
 	  </group>
 
     <!-- 加载全局点云地图 -->
-    <include file="$(find hdl_localization)/launch/load_global_map.launch" />
+    <!-- <include file="$(find hdl_localization)/launch/load_global_map.launch" /> -->
 
     <!--  imu 与 lidar 的相对位置 -->
     <!-- V2 -->
-    <node pkg="tf" type="static_transform_publisher" name="tf_imu_velody" args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu velodyne  100"/>
+    <!-- <node pkg="tf" type="static_transform_publisher" name="tf_imu_velody" args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu velodyne  100"/> -->
     <!-- <node pkg="tf" type="static_transform_publisher" name="tf_imu_livox"  args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu livox  100"/>  -->
+
+    <!-- V2 liejian -->
+    <node pkg="tf" type="static_transform_publisher" name="tf_lidar2imu" args="0.006236   -0.025549   0.088329  0.0056564, 0.0035976, 0.0035394, 0.9999713 imu velodyne  100"/>
+
 
 </launch>

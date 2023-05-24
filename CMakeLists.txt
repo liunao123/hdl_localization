@@ -31,6 +31,7 @@ find_package(catkin REQUIRED COMPONENTS
   ndt_omp
   fast_gicp
   hdl_global_localization
+  base_controller
 )
 
 find_package(PCL 1.7 REQUIRED)
@@ -41,6 +42,12 @@ add_definitions(${PCL_DEFINITIONS})
 message(STATUS "PCL_INCLUDE_DIRS:" ${PCL_INCLUDE_DIRS})
 message(STATUS "PCL_LIBRARY_DIRS:" ${PCL_LIBRARY_DIRS})
 message(STATUS "PCL_DEFINITIONS:" ${PCL_DEFINITIONS})
+
+# Find yaml-cpp package
+find_package(yaml-cpp REQUIRED)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -78,10 +85,12 @@ include_directories(
 add_library(hdl_localization_nodelet
   src/hdl_localization/pose_estimator.cpp
   apps/hdl_localization_nodelet.cpp
+  # apps/hdl_localization_nodelet_SM.cpp
 )
 target_link_libraries(hdl_localization_nodelet
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  yaml-cpp
 )
 add_dependencies(hdl_localization_nodelet ${PROJECT_NAME}_gencpp)
 

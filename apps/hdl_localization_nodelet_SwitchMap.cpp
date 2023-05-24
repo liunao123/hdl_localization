@@ -17,11 +17,14 @@
 // #include <Eigen/Geometry.h>
 
 #include <std_msgs/Float32.h>
+#include <std_msgs/String.h>
 #include <std_srvs/Empty.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+
+#include <yaml-cpp/yaml.h>
 
 #include <tf/transform_broadcaster.h>
 
@@ -42,6 +45,7 @@
 #include <hdl_global_localization/QueryGlobalLocalization.h>
 
 #include<base_controller/csgPoseStampedMatchValue.h>
+#include<base_controller/CSGMapInfo.h>
 
 
 
@@ -74,14 +78,16 @@ public:
     points_sub = mt_nh.subscribe("/velodyne_points", 1, &HdlLocalizationNodelet::points_callback, this);
     globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
     initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
+    switchMapSts_sub = nh.subscribe("/switchMap_Status", 2, &HdlLocalizationNodelet::switchMapStatusCallBack, this);
 
     pose_pub = nh.advertise<nav_msgs::Odometry>("odom", 1, false);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned_points", 1, false);
     status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
     confidence_pub = nh.advertise<std_msgs::Float32>("/confidece", 5, false);
     string_pub = nh.advertise<std_msgs::String>("/XY_yaw", 5, false);
+    map_name_pub = nh.advertise<std_msgs::String>("/map_request/pcd", 1, true);
     current_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/current_pose", 5);
-    keda_current_pub = nh.advertise<base_controller::csgPoseStampedMatchValue>("/keda_current_pose", 5);
+    keda_current_pub= nh.advertise<base_controller::csgPoseStampedMatchValue>("/keda_current_pose", 5);
 
     // global localization
     use_global_localization = private_nh.param<bool>("use_global_localization", true);
@@ -95,6 +101,9 @@ public:
 
       relocalize_server = nh.advertiseService("/relocalize", &HdlLocalizationNodelet::relocalize, this);
     }
+  
+    load_map_from_yaml();
+
   }
 
 private:
@@ -161,6 +170,43 @@ private:
     return nullptr;
   }
 
+  void switchMapStatusCallBack(const base_controller::CSGMapInfo &mapInfo)
+  {
+    iRegionID = mapInfo.iRegionID;
+    iMapID =  mapInfo.iMapID;
+    iNavType =  mapInfo.iNavType;
+    load_global_map();
+  }
+  
+  void load_map_from_yaml() {
+    iRegionID = 0;
+    iMapID = 0;
+    iNavType = 0;
+    try {
+      YAML::Node config = YAML::LoadFile("/home/map/map.yaml");
+      // Get values
+      iRegionID = config["iRegionID"].as<int>();
+      iMapID = config["iMapID"].as<int>();
+      iNavType = config["iNavType"].as<int>();
+    } catch (YAML::BadFile& e) {
+      ROS_WARN_STREAM(  "Error loading YAML file: " << e.what() << std::endl );
+    }    
+    load_global_map();
+  }
+
+  void load_global_map() {
+    std_msgs::String pn;
+    pn.data = "/home/map/region" + std::to_string(iRegionID) + "-" + std::to_string(iMapID) + "/saveMap.pcd";
+    
+    for(int i = 0; i < 3; i++)
+    {
+      map_name_pub.publish(pn);
+      ros::Duration(2).sleep();
+      ROS_WARN("iRegionID is %d , iMapID is %d, iNavType is %d . map file %s .", iRegionID, iMapID, iNavType, pn.data.c_str() );
+    }
+
+  }
+
   void initialize_params() {
     // intialize scan matching method
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
@@ -207,7 +253,10 @@ private:
    * @param points_msg
    */
   void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg) {
-
+    // static int pc_cnts = 0;
+    // if (pc_cnts++ % 2) {
+    //   return;
+    // }
 
     ros::Time s_t = ros::Time::now();
 
@@ -232,7 +281,7 @@ private:
     }
     
     // ROS_WARN(" pc size() %d ", pcl_cloud->size());
-    float range = 0.50;
+    float range = 1.0;
     static pcl::CropBox< PointT > cropBoxFilter (true);
     cropBoxFilter.setInputCloud (pcl_cloud);
     cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -range, 1.0f));
@@ -241,12 +290,12 @@ private:
     cropBoxFilter.filter (*pcl_cloud);
     // ROS_WARN(" pc size() %d ", pcl_cloud->size());
 
-    // range = 200.0;
-    // cropBoxFilter.setInputCloud (pcl_cloud);
-    // cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -0.1, 1.0f));
-    // cropBoxFilter.setMax (Eigen::Vector4f  (range, range, range, 1.0f));
-    // cropBoxFilter.setNegative(true);
-    // cropBoxFilter.filter (*pcl_cloud);
+    range = 200.0;
+    cropBoxFilter.setInputCloud (pcl_cloud);
+    cropBoxFilter.setMin (Eigen::Vector4f  (-range, -range, -0.1, 1.0f));
+    cropBoxFilter.setMax (Eigen::Vector4f  (range, range, 3.0, 1.0f));
+    cropBoxFilter.setNegative(true);
+    cropBoxFilter.filter (*pcl_cloud);
 
     // transform pointcloud into odom_child_frame_id
     std::string tfError;
@@ -382,10 +431,8 @@ private:
 
       if (!set_global_map_service.call(srv)) {
         NODELET_INFO("failed to set global map");
-        ROS_ERROR("ffffffffffffffffff");
       } else {
         NODELET_INFO("done");
-        ROS_ERROR("dddddddddddddddddddddddd");
       }
     }
   }
@@ -569,8 +616,8 @@ private:
     cpm.match_value = MatchValue;
 
     // 暂定
-    cpm.iRegionID = 1;
-    cpm.iMapID = 2;
+    cpm.iRegionID = iRegionID;
+    cpm.iMapID = iMapID;
     keda_current_pub.publish(cpm);
 
     // 把这个 定位成功的 位姿记录下来
@@ -770,7 +817,7 @@ private:
   ros::Subscriber points_sub;
   ros::Subscriber globalmap_sub;
   ros::Subscriber initialpose_sub;
-  ros::Subscriber odom_sub;
+  ros::Subscriber switchMapSts_sub;
 
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
@@ -779,6 +826,7 @@ private:
   ros::Publisher string_pub;
   ros::Publisher current_pose_pub;
   ros::Publisher keda_current_pub;
+  ros::Publisher map_name_pub;
 
   tf2_ros::Buffer tf_buffer;
   tf2_ros::TransformListener tf_listener;
@@ -807,6 +855,11 @@ private:
   ros::ServiceClient set_global_map_service;
   ros::ServiceClient query_global_localization_service;
 
+  int iRegionID;
+  int iMapID;
+  int iNavType;
+
+  // odom input buffer
   nav_msgs::Odometry last_odom_pose;
 
 };
