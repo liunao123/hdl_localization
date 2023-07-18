@@ -497,10 +497,52 @@ private:
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     const auto& p = pose_msg->pose.pose.position;
     const auto& q = pose_msg->pose.pose.orientation;
+
+    // 手动指定 机器人的高  
+	  // 当重定位的时候 自动计算出来地图上 该位置附近一定范围内地面点的高度 取均值来作为机器人的高度值
+    if (!globalmap) {
+      ROS_WARN("globalmap has not been received!!");
+    }
+
+    float acc_z = 0;
+    float acc_z_2 = 0;
+    float mean_z = 0;
+    int num_inlier = 0;
+    std::vector<int> k_indices;
+
+    ROS_WARN(" start to find z from initialpose ." );
+    for (int i = 0; i < globalmap->size(); i += 10) {
+      const auto& pt = globalmap->at(i);
+      if( std::fabs(p.x - pt.x) < 1.0 && std::fabs(p.y - pt.y) < 1.0  ) // 更普遍
+      {
+        acc_z  += globalmap->points[ i ].z;
+        k_indices.push_back( i );
+      }
+    }
+
+    if ( k_indices.size() > 0 ) 
+    {
+      ROS_WARN(" mean z first: is :  %f .<cnts is %ld > ", acc_z / k_indices.size(), k_indices.size());
+      for (int i = 0; i < k_indices.size(); i++) {
+        if (globalmap->points[k_indices[i]].z <= acc_z / k_indices.size()) {
+          acc_z_2 += globalmap->points[k_indices[i]].z;
+          num_inlier++;
+        }
+      }
+      mean_z = acc_z_2 / num_inlier;
+      ROS_WARN(" mean z second is :  %f .<cnts is %ld > ", mean_z , num_inlier);
+    }
+    else
+    {
+      ROS_ERROR(" This initialpose is INVAILD , relocate again please ....." );
+    }
+    ROS_WARN(" mean z is :  %f .<cnts is %ld > ", mean_z , num_inlier);
+    // end of get z values
+
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
       ros::Time::now(),
-      Eigen::Vector3f(p.x, p.y, p.z),
+      Eigen::Vector3f(p.x, p.y, mean_z),
       Eigen::Quaternionf(q.w, q.x, q.y, q.z),
       private_nh.param<double>("cool_time_duration", 0.5)));
   }
@@ -722,7 +764,6 @@ private:
     // ROS_WARN(" status.inlier_fraction %lf , time %f . aligned->size() %d ", status.inlier_fraction, header.stamp.toSec(), aligned->size());
     
     if (status.inlier_fraction > LOC_SUCCESS_THRESHLOD) 
-    // if ( 1 ) 
     {
       publish_odometry(header.stamp, registration->getFinalTransformation(), status.inlier_fraction );
     }
@@ -730,6 +771,7 @@ private:
     {
       if (! private_nh.param<bool>("enable_robot_odometry_prediction", false) ) 
       {
+        publish_odometry(header.stamp, registration->getFinalTransformation(), status.inlier_fraction );
         ROS_WARN(" enable_robot_odometry_prediction  false ");
         return;
       }
@@ -772,7 +814,7 @@ private:
       // publish_odometry(header.stamp, now_pose_eigen.matrix().cast<float>());
       now_pose_eigen = last_pose_eigen * PoseDelta;
 
-      //TODO 里程计补偿的 位姿上，匹配度有多少  大于hdl的匹配度，再决定用哪个位姿 ？test DONE at 20230427
+      // DONE!
       // Executing the transformation
       pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZI> ());
 
