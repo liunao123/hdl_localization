@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<launch>
+
+  <param name="use_sim_time" value="true" />
+
+  <!-- arguments -->
+  <arg name="nodelet_manager" default="hdl_locate_nodelet_manager" />
+  <arg name="points_topic" default="/output_cloud_livox" /> 
+
+  <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
+  <!-- this is useful to match the LIDAR and IMU coodinate systems -->
+  <arg name="odom_child_frame_id" default="base_footprint" />
+
+  <arg name="enable_robot_odometry_prediction" value="true" />
+  <!-- 使用里程计的时候，这个才会有用 -->
+  <arg name="robot_odom_frame_id" value="odom" />
+
+  <!-- optional arguments -->
+  <arg name="use_imu" default="true" />
+  <arg name="invert_imu_acc" default="false" />
+  <arg name="invert_imu_gyro" default="false" />
+  <arg name="use_global_localization" default="false" />
+  <arg name="imu_topic" default="/livox/imu" /> 
+   <!--<arg name="imu_topic" default="/imu/data" />-->
+
+  <arg name="plot_estimation_errors" value="false" />
+
+  <!-- in case you use velodyne_driver, comment out the following line -->
+  <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
+    <!-- hdl_localization_nodelet -->
+    <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+      <remap from="/velodyne_points" to="$(arg points_topic)" />
+      <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
+      <remap from="aligned_points" to="/csg_fixed_laser" />
+      <remap from="odom" to="/odom_hdl" />
+
+      <!-- odometry frame_id -->
+      <param name="odom_child_frame_id" value="$(arg odom_child_frame_id)" />
+      <!-- imu settings -->
+      <!-- during "cool_time", imu inputs are ignored -->
+      <param name="use_imu" value="$(arg use_imu)" />
+      <param name="invert_acc" value="$(arg invert_imu_acc)" />
+      <param name="invert_gyro" value="$(arg invert_imu_gyro)" />
+      <param name="cool_time_duration" value="5.0" />
+      <!-- robot odometry-based prediction -->
+      <param name="enable_robot_odometry_prediction" value="$(arg enable_robot_odometry_prediction)" />
+      <param name="robot_odom_frame_id" value="$(arg robot_odom_frame_id)" />
+      <!-- ndt settings -->
+      <!-- available reg_methods: NDT_OMP, NDT_CUDA_P2D, NDT_CUDA_D2D-->
+      <param name="reg_method" value="NDT_OMP" />
+      <!-- if NDT is slow for your PC, try DIRECT1 serach method, which is a bit unstable but extremely fast -->
+      <param name="ndt_neighbor_search_method" value="DIRECT7" />
+
+
+      
+      <!-- test for xn -->
+      <param name="downsample_resolution" value="0.2" />
+      <param name="max_correspondence_dist" value="0.15" />
+      <param name="loc_success_threshold" value="0.85" />
+      <param name="ndt_neighbor_search_radius" value="1.0" />   <!-- 1.0 -->
+      <param name="ndt_resolution" value="0.5" />  <!-- 0.8 -->
+      <param name="ndt_stepsize" value="0.2" />     <!-- 0.2 -->
+
+      <param name="low_points_thresh" value="1000" />     <!-- 700 -->
+      <param name="wait_time" value="0.001" />     <!-- 0.1 -->
+      
+      <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
+      <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
+      <!-- test for xn  -->
+      <param name="specify_init_pose" value="true" />
+      <param name="init_pos_x" value="0.0 " />
+      <param name="init_pos_y" value="0.0" />
+      <param name="init_pos_z" value="0.0" />
+      <param name="init_ori_x" value="0.0" />
+      <param name="init_ori_y" value="0.0" />
+      <param name="init_ori_z" value="0.0" />
+      <param name="init_ori_w" value="1.0" />
+      <param name="use_global_localization" value="$(arg use_global_localization)" />
+    </node>
+
+    <!-- <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors" if="$(arg plot_estimation_errors)" /> -->
+
+    <!-- 全局重定位，未测试 -->
+    <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
+
+    <!-- 是否使用里程计，内部通过 TF 实现的 -->
+    <group if="$(arg enable_robot_odometry_prediction)">
+      <!-- <include file="$(find fast_livo)/launch/mapping_v1_xn.launch" />  -->
+      <!-- <include file="$(find faster_lio)/launch/mapping_horizon.launch" /> -->
+    </group>
+
+    <!-- 加载全局点云地图 -->
+    <!-- <include file="$(find hdl_localization)/launch/load_global_map.launch" /> -->
+
+	  <node pkg="tf" type="static_transform_publisher" name="tf_livox" args="-0.05512 -0.02226 -0.0297 0.0 0.0 0.0  livox  livox_frame 100"/>   
+	  <node pkg="tf" type="static_transform_publisher" name="tf_rslidar_livox" args="0.0 0.0 0.13 0.0 0.0 0.0 rslidar livox   100"/> 
+	  <node pkg="tf" type="static_transform_publisher" name="tf_base_footprint2rslidar" args="0.31 0.0 0.123 0.0 0.0 0.0 base_footprint rslidar  100"/>
+    <node pkg="tf" type="static_transform_publisher" name="tf_imu_link" args="-0.1713 0.00 -0.05925 0 0 0 1 base_footprint imu_link 100"/>
+
+    <rosparam command="load" file="/opt/csg/slam/navs/param/lio_config.yaml" />
+   	<node pkg="fast_livo" type="feature_extract" name="feature_extract"  respawn="true" output="screen" > 
+      <remap from="/laser_cloud_flat" to="/output_cloud_livox" />
+    </node>
+	
+    <node pkg="rosbag" type="play" name="bag_play"  required="true"  output="screen"  args="/home/bag/v1/xn_09_nav/2023-10-26-16-16-24.bag  -d 2 -s 450  --clock "/>
+
+    <include file="$(find hdl_localization)/launch/robot_pose_ekf.launch" /> 
+
+   	<!-- <node pkg="hdl_localization" type="odom2tf" name="odom2tf" required="true" output="log" />  -->
+
+</launch>

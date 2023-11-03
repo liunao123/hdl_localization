@@ -14,6 +14,7 @@
 #include <pluginlib/class_list_macros.h>
 
 #include <pcl/filters/voxel_grid.h>
+#include "zlog.h"
 
 namespace hdl_localization {
 
@@ -30,8 +31,9 @@ public:
     nh = getNodeHandle();
     mt_nh = getMTNodeHandle();
     private_nh = getPrivateNodeHandle();
+	  initZlog();
 
-    initialize_params();
+    // initialize_params();
 
     // publish globalmap with "latched" publisher
     globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
@@ -44,16 +46,17 @@ private:
   void initialize_params() {
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
+
     globalmap.reset(new pcl::PointCloud<PointT>());
     
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.35);
-    ROS_WARN(" voxel filter <resolution : %f >  . ", downsample_resolution );
+    dzlog_info(" voxel filter <resolution : %f >  . ", downsample_resolution );
 
-    ROS_WARN("start load global map : %s ", globalmap_pcd.c_str());
+    dzlog_info("start load global map : %s ", globalmap_pcd.c_str());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
 
-    ROS_WARN("size if global map: %ld . ",globalmap->points.size());
+    dzlog_info("size if global map: %ld . ",globalmap->points.size());
     std::ifstream utm_file(globalmap_pcd + ".utm");
     if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true)) {
       double utm_easting;
@@ -77,20 +80,52 @@ private:
     voxelgrid->filter(*filtered);
 
     globalmap = filtered;
-    ROS_WARN("size if global map after voxel filter : %ld . " , globalmap->points.size());
+    dzlog_info("size if global map after voxel filter : %ld . " , globalmap->points.size());
   }
 
   void pub_once_cb(const ros::WallTimerEvent& event) {
+    if (!globalmap) {
+      dzlog_info("globalmap has not been load!!");
+      return;
+    }    
     globalmap_pub.publish(globalmap);
   }
 
+  int initZlog()
+  {
+      if (-1 == access("/home/roslog", F_OK))
+      {
+          mkdir("/home/roslog", 0777);
+      }
+      if (dzlog_init("/home/config/zlog.conf", "hdl_cat") != 0)
+      {
+          printf("@@@ init zlog failed\n");
+          return -1;
+      }
+      return 0;
+  }
+  
+  
   void map_update_callback(const std_msgs::String &msg){
     ROS_INFO_STREAM("Received map request, map path : "<< msg.data);
+	
+	  dzlog_info(" start to load global map : %s ." ,  msg.data.c_str() );
+
+    if (globalmap_pcd_last == msg.data)
+    {
+      globalmap_pub.publish(globalmap);
+	    dzlog_info(" same pcd return " );
+      return;
+    }
+	  globalmap_pcd_last = msg.data;
+
     std::string globalmap_pcd = msg.data;
     globalmap.reset(new pcl::PointCloud<PointT>());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
-
+	
+    dzlog_info("size if global map: %ld . ",globalmap->points.size());
+	
     // downsample globalmap
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
@@ -102,6 +137,9 @@ private:
 
     globalmap = filtered;
     globalmap_pub.publish(globalmap);
+
+	  dzlog_info("size if global map after voxel filter : %ld . " , globalmap->points.size());
+	
   }
 
 private:
@@ -115,6 +153,7 @@ private:
 
   ros::WallTimer globalmap_pub_timer;
   pcl::PointCloud<PointT>::Ptr globalmap;
+  std::string globalmap_pcd_last;
 };
 
 }
