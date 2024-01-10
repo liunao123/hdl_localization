@@ -45,6 +45,7 @@
 #include <hdl_global_localization/QueryGlobalLocalization.h>
 
 #include <base_controller/csgPoseStampedMatchValue.h>
+#include <base_controller/CSGMapInfo.h>
 
 #include "zlog.h"
 
@@ -79,7 +80,7 @@ public:
     points_sub = mt_nh.subscribe("/velodyne_points", 1, &HdlLocalizationNodelet::points_callback, this);
     globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
     initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
-    // switchMapSts_sub = nh.subscribe("/switchMap", 2, &HdlLocalizationNodelet::switchMapStatusCallBack, this);
+    switchMapSts_sub = nh.subscribe("/switchMap", 2, &HdlLocalizationNodelet::switchMapStatusCallBack, this);
 
     pose_pub = nh.advertise<nav_msgs::Odometry>("odom", 1, false);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned_points", 1, false);
@@ -90,8 +91,8 @@ public:
     current_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/current_pose", 5);
     keda_current_pub = nh.advertise<base_controller::csgPoseStampedMatchValue>("/keda_current_pose", 5);
 
-    // pub_map_info_status_ = nh.advertise<base_controller::CSGMapInfo>("/switchMap_Status", 10, false);
-    // map_info_pub_timer_ = nh.createTimer(ros::Duration(1), &HdlLocalizationNodelet::MapInfoPubTimer, this);
+    pub_map_info_status_ = nh.advertise<base_controller::CSGMapInfo>("/switchMap_Status", 10, false);
+    map_info_pub_timer_ = nh.createTimer(ros::Duration(1), &HdlLocalizationNodelet::MapInfoPubTimer, this);
 
     iStatus = 0;
     dzlog_info("load_map_from_yaml");
@@ -175,42 +176,42 @@ private:
     return nullptr;
   }
 
-  // void switchMapStatusCallBack(const base_controller::CSGMapInfo& mapInfo) {
-    // iRegionID = mapInfo.iRegionID;
-    // iMapID = mapInfo.iMapID;
-    // iNavType = mapInfo.iNavType;
+  void switchMapStatusCallBack(const base_controller::CSGMapInfo& mapInfo) {
+    iRegionID = mapInfo.iRegionID;
+    iMapID = mapInfo.iMapID;
+    iNavType = mapInfo.iNavType;
 
-    // // write to file
-    // std::fstream fs;
-    // std::string dataPath = "/home/map/mapinfo.yaml";
-    // fs.open(dataPath.c_str(), std::fstream::out);
-    // if (fs.is_open()) {
-    //   fs << iRegionID << std::endl;
-    //   fs << iMapID << std::endl;
-    //   fs << iNavType << std::endl;
-    //   fs.close();
-    // } else {
-    //   dzlog_error("###### saveMapInfo() cannot open mapinfo.yaml !!!");
-    // }
-    // dzlog_info("@@@@@@ saveMapInfo() write mapInfo OK!!!");
+    // write to file
+    std::fstream fs;
+    std::string dataPath = "/home/map/mapinfo.yaml";
+    fs.open(dataPath.c_str(), std::fstream::out);
+    if (fs.is_open()) {
+      fs << iRegionID << std::endl;
+      fs << iMapID << std::endl;
+      fs << iNavType << std::endl;
+      fs.close();
+    } else {
+      dzlog_error("###### saveMapInfo() cannot open mapinfo.yaml !!!");
+    }
+    dzlog_info("@@@@@@ saveMapInfo() write mapInfo OK!!!");
 
-    // if (mapInfo.iNavType != 5) return;
+    if (mapInfo.iNavType != 5) return;
 
-    // load_global_map();
-  // }
+    load_global_map();
+  }
 
-  // void MapInfoPubTimer(const ros::TimerEvent& time) {
-  //   if (iNavType != 5) return;
+  void MapInfoPubTimer(const ros::TimerEvent& time) {
+    if (iNavType != 5) return;
 
-  //   if ((pub_map_info_status_.getNumSubscribers() > 0)) {
-  //     base_controller::CSGMapInfo mapInfo;
-  //     mapInfo.iRegionID = iRegionID;
-  //     mapInfo.iMapID = iMapID;
-  //     mapInfo.iStatus = iStatus;
-  //     mapInfo.iNavType = iNavType;  // test temp
-  //     pub_map_info_status_.publish(mapInfo);
-  //   }
-  // }
+    if ((pub_map_info_status_.getNumSubscribers() > 0)) {
+      base_controller::CSGMapInfo mapInfo;
+      mapInfo.iRegionID = iRegionID;
+      mapInfo.iMapID = iMapID;
+      mapInfo.iStatus = iStatus;
+      mapInfo.iNavType = iNavType;  // test temp
+      pub_map_info_status_.publish(mapInfo);
+    }
+  }
 
   int initZlog() {
     if (-1 == access("/home/roslog", F_OK)) {
@@ -224,27 +225,27 @@ private:
   }
 
   void load_map_from_yaml() {
-    // iRegionID = 0;
-    // iMapID = 0;
-     iNavType = 5;
+    iRegionID = 0;
+    iMapID = 0;
+    iNavType = -1;
 
-    // std::fstream fs;
-    // std::string mapFile = "/home/map/mapinfo.yaml";
-    // fs.open(mapFile.c_str(), std::fstream::in);
-    // if (fs.is_open()) {
-    //   char line[100];
-    //   fs.getline(line, 100);
-    //   iRegionID = std::atoi(line);
-    //   fs.getline(line, 100);
-    //   iMapID = std::atoi(line);
-    //   fs.getline(line, 100);
-    //   iNavType = std::atoi(line);
-    //   fs.close();
-    //   dzlog_info("@@@@@@ loadMapInfo() iRegionID = %d iMapID = %d,iNavType = %d", iRegionID, iMapID, iNavType);
-    // } else {
-    //   dzlog_error("###### loadMapInfo() cannot read mapInfo data !");
-    //   return;
-    // }
+    std::fstream fs;
+    std::string mapFile = "/home/map/mapinfo.yaml";
+    fs.open(mapFile.c_str(), std::fstream::in);
+    if (fs.is_open()) {
+      char line[100];
+      fs.getline(line, 100);
+      iRegionID = std::atoi(line);
+      fs.getline(line, 100);
+      iMapID = std::atoi(line);
+      fs.getline(line, 100);
+      iNavType = std::atoi(line);
+      fs.close();
+      dzlog_info("@@@@@@ loadMapInfo() iRegionID = %d iMapID = %d,iNavType = %d", iRegionID, iMapID, iNavType);
+    } else {
+      dzlog_error("###### loadMapInfo() cannot read mapInfo data !");
+      return;
+    }
 
     dzlog_info("load_global_map: ");
     if (iNavType != 5) {
@@ -258,11 +259,11 @@ private:
 
   void load_global_map() {
     std_msgs::String pn;
-    pn.data = "/home/map/saveMap.pcd" ;
+    pn.data = "/home/map/region" + std::to_string(iRegionID) + "-" + std::to_string(iMapID) + "/saveMap.pcd";
     iStatus = 1;
     ros::Duration(1).sleep();
     map_name_pub.publish(pn);
-    dzlog_info(" map file %s .",  pn.data.c_str());
+    dzlog_info("iRegionID is %d , iMapID is %d, iNavType is %d . map file %s .", iRegionID, iMapID, iNavType, pn.data.c_str());
     ros::Duration(2).sleep();
     iStatus = 2;
 
@@ -335,7 +336,7 @@ private:
     relocalizing = false;
 	  relocate = true;
 
-    wait_tf_duration =  ros::Duration(0.15);
+    wait_tf_duration =  ros::Duration(0.05);
 
     delta_estimater.reset(new DeltaEstimater(create_registration()));
 
@@ -377,8 +378,7 @@ private:
       return;
     }
 
-    // ! 20231013
-    const auto& stamp = points_msg->header.stamp;  //ros::Time::now();
+    const auto& stamp = points_msg->header.stamp;
     pcl::PointCloud<PointT>::Ptr pcl_cloud(new pcl::PointCloud<PointT>());
     pcl::fromROSMsg(*points_msg, *pcl_cloud);
 
@@ -400,17 +400,7 @@ private:
 	
     /*    *cloud =  *pcl_cloud;  */
     std::string points_frame = points_msg->header.frame_id;
-    // if ( points_frame == "/rslidar" )
-    // {
-    //   points_frame = "rslidar" ;
-    //   // dzlog_info("rslidar time is %f", points_msg->header.stamp.toSec());
-    // }
-    // else
-    // {
-    //   // dzlog_info(" DO NOT use livox " );
-    //   // dzlog_info("livox time is %f", points_msg->header.stamp.toSec());
-    //   // return;
-    // }
+
     static Eigen::Matrix4f TF_temp = Eigen::Matrix4f::Identity();
     static bool get_tf_ok = false;
 
@@ -440,11 +430,6 @@ private:
 
     auto filtered = downsample(cloud);
 
-    // if (filtered->header.frame_id.empty()) {
-    //   dzlog_info("filtered->header.frame_id.is empty");
-    //   return;
-    // }
-
     last_scan = filtered;
 
     // if (relocalizing) {
@@ -468,6 +453,10 @@ private:
         const auto& gyro = (*imu_iter)->angular_velocity;
         double acc_sign = invert_acc ? -1.0 : 1.0;
         double gyro_sign = invert_gyro ? -1.0 : 1.0;
+        // if ( std::fabs(acc.x) > 10 || std::fabs(acc.y) > 10 || std::fabs(acc.z-10) > 10 || std::fabs(gyro.x) > 0.25 || std::fabs(gyro.y) > 0.25 || std::fabs(gyro.z) > 0.25 )
+        // {
+        //   continue;
+        // }
         pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
@@ -531,8 +520,7 @@ private:
             PoseDelta = tf2::transformToEigen(odom_delta);
           } catch (tf2::TransformException &ex) {
             dzlog_info("WARN tf eeeeerror. Could NOT transform: %s",  ex.what());
-            dzlog_info("WARN DROP this points. give up locate .");
-            dzlog_info(" can not get odom . try hdl locate .");
+            dzlog_info("WARN odom is not get . try hdl locate .");
             aligned = pose_estimator->correct(stamp, filtered);
             publish_scan_matching_status(points_msg->header, aligned);
             return;
@@ -702,7 +690,7 @@ private:
     dzlog_info(" start to find z from initialpose ." );
     for (int i = 0; i < globalmap->size(); i += 10) {
       const auto& pt = globalmap->at(i);
-      if( std::fabs(px - pt.x) < 1.0 && std::fabs(py - pt.y) < 3.0  ) // 更普遍 3m以内的点取均值
+      if( std::fabs(px - pt.x) < 1.0 && std::fabs(py - pt.y) < 0.50  ) // 更普遍 3m以内的点取均值
       {
         acc_z  += globalmap->points[ i ].z;
         k_indices.push_back( i );
@@ -729,8 +717,8 @@ private:
     dzlog_info("@@@@@@ set /initialpose. x = %f,y = %f, z = %f", px, py, mean_z);
 
     // end of get z values
-    // mean_z = 0;
-    return mean_z + 0.3; // add 0.3 mean robot is higher then the ground 0.3m.
+    // mean_z = -1.8;
+    return mean_z + 0.0; // add 0.2 mean robot is higher then the ground 0.2m.
   }
 
 
@@ -790,42 +778,36 @@ private:
     }
 
     pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
+    downsample_filter->setInputCloud(cloud);
+    downsample_filter->filter(*filtered);
 
-    pcl::PointCloud<PointT>::Ptr less_30_pc(new pcl::PointCloud<PointT>());
-    pcl::PointCloud<PointT>::Ptr gt_30_pc(new pcl::PointCloud<PointT>());
-
-    // dzlog_info(" pc size() %d ", cloud->size());
-    float range = 30.0;
+    // ROS_WARN(" pc size() %d ", filtered->size());
+    // 保留机器人上下 2m 以内的点，其余的点可能会打在 列车上(如果有)，无法使用。
+    float range = 150.0;
     static pcl::CropBox<PointT> cropBoxFilter_temp(true);
-    cropBoxFilter_temp.setInputCloud(cloud);
+    cropBoxFilter_temp.setInputCloud(filtered);
     cropBoxFilter_temp.setMin(Eigen::Vector4f(-range, -range, -range, 1.0f));
     cropBoxFilter_temp.setMax(Eigen::Vector4f(range, range, range, 1.0f));
     cropBoxFilter_temp.setNegative(false);
-    cropBoxFilter_temp.filter(*less_30_pc);
-
-    cropBoxFilter_temp.setNegative(true);
-    cropBoxFilter_temp.filter(*gt_30_pc);
-
-    downsample_filter->setInputCloud(less_30_pc);
-    downsample_filter->filter(*filtered);
-	
-	  // 去除距离很近的点
-    range = 0.10;
+    cropBoxFilter_temp.filter(*filtered);
+    
+    // 去除距离很近的点
+    range = 1.0;
     cropBoxFilter_temp.setMin(Eigen::Vector4f(-range, -range, -range, 1.0f));
     cropBoxFilter_temp.setMax(Eigen::Vector4f(range, range, range, 1.0f));
     cropBoxFilter_temp.setNegative(true);
     cropBoxFilter_temp.setInputCloud(filtered);
     cropBoxFilter_temp.filter(*filtered);
-	
-	  // 远处的点全部保留 test for xn
-    *filtered += *gt_30_pc;
-    
-    pcl::RadiusOutlierRemoval< PointT > outrem;
-	  outrem.setInputCloud(filtered);
-	  outrem.setRadiusSearch(2);
-	  outrem.setMinNeighborsInRadius(2);
-	  // apply filter
-	  outrem.filter(*filtered);
+
+    // 如果有车，这个范围内是打在车上的点
+    cropBoxFilter_temp.setMin(Eigen::Vector4f(-500, -500, 1.50, 1.0f));
+    cropBoxFilter_temp.setMax(Eigen::Vector4f(500, 500, 4.50, 1.0f));
+    cropBoxFilter_temp.setNegative(true);
+    cropBoxFilter_temp.setInputCloud(filtered);
+    cropBoxFilter_temp.filter(*filtered);
+
+
+    // ROS_WARN(" CropBox pc size() %d ", filtered->size());
 
     // filtered->header = cloud->header;
 
@@ -869,6 +851,30 @@ private:
 
       tf_broadcaster.sendTransform(odom_trans);
 
+      // dzlog_info("one use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
+      // dzlog_info(" two TM xyz is %lf, %lf, %lf ", odom_trans.transform.translation.x,  odom_trans.transform.translation.y, odom_trans.transform.translation.z );
+
+      // s_t = ros::Time::now();
+
+      /*
+      // 后到前的变换据矩阵， T_mb : body frame 到 map frame
+      geometry_msgs::TransformStamped T_mb = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
+      geometry_msgs::TransformStamped T_wb = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id , ros::Time(0), wait_tf_duration);
+      Eigen::Isometry3d T_mb_eigen , T_wb_eigen, T_mw;
+      tf::transformMsgToEigen (T_mb.transform , T_mb_eigen );
+      tf::transformMsgToEigen (T_wb.transform , T_wb_eigen );
+      T_mw =  T_mb_eigen  * T_wb_eigen.inverse();
+
+      geometry_msgs::TransformStamped TM;
+      tf::transformEigenToMsg (T_mw , TM.transform);
+      TM.header.stamp = stamp;
+      TM.header.frame_id = "map";
+      TM.child_frame_id = robot_odom_frame_id;
+      tf_broadcaster.sendTransform(TM);
+      // dzlog_info("two use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
+      // dzlog_info(" pub  TM : %s",robot_odom_frame_id.c_str()  );
+      // dzlog_info(" two TM xyz is %lf, %lf, %lf ", TM.transform.translation.x,  TM.transform.translation.y, TM.transform.translation.z );
+      */
     } else {
       // if (private_nh.param<bool>("/hdl_localization_nodelet/enable_robot_odometry_prediction", false)) {
       // dzlog_info("%s,  %s",robot_odom_frame_id.c_str() , odom_child_frame_id.c_str());
@@ -884,15 +890,15 @@ private:
     nav_msgs::Odometry odom;
     odom.header.stamp = stamp;
     odom.header.frame_id = "map";
-    // odom.twist.twist.linear.x = ( pose(0,3) - last_pose_eigen(0,3) ) / ( stamp - last_odom_pose.header.stamp ).toSec();
-    // odom.twist.twist.linear.y = ( pose(1,3) - last_pose_eigen(1,3) ) / ( stamp - last_odom_pose.header.stamp ).toSec();
-    // odom.twist.twist.linear.z = ( pose(2,3) - last_pose_eigen(2,3) ) / ( stamp - last_odom_pose.header.stamp ).toSec();
-    // Eigen::Vector3d last_eulerAngle = last_pose_eigen.rotation().eulerAngles(2,1,0);
-    // Eigen::Vector3d now_eulerAngle = Eigen::Isometry3d(pose.cast<double>()).rotation().eulerAngles(2,1,0);
-    // Eigen::Vector3d eulerAngle_velocity = ( now_eulerAngle - last_eulerAngle ) / ( stamp - last_odom_pose.header.stamp ).toSec() ;
-    // odom.twist.twist.angular.z = eulerAngle_velocity(0);
-    // odom.twist.twist.angular.y = eulerAngle_velocity(1);
-    // odom.twist.twist.angular.x = eulerAngle_velocity(2);
+    odom.twist.twist.linear.x = ( pose(0,3) - last_pose_eigen(0,3) ) / ( stamp - last_odom_pose.header.stamp ).toSec();
+    odom.twist.twist.linear.y = ( pose(1,3) - last_pose_eigen(1,3) ) / ( stamp - last_odom_pose.header.stamp ).toSec();
+    odom.twist.twist.linear.z = ( pose(2,3) - last_pose_eigen(2,3) ) / ( stamp - last_odom_pose.header.stamp ).toSec();
+    Eigen::Vector3d last_eulerAngle = last_pose_eigen.rotation().eulerAngles(2,1,0);
+    Eigen::Vector3d now_eulerAngle = Eigen::Isometry3d(pose.cast<double>()).rotation().eulerAngles(2,1,0);
+    Eigen::Vector3d eulerAngle_velocity = ( now_eulerAngle - last_eulerAngle ) / ( stamp - last_odom_pose.header.stamp ).toSec() ;
+    odom.twist.twist.angular.z = eulerAngle_velocity(0);
+    odom.twist.twist.angular.y = eulerAngle_velocity(1);
+    odom.twist.twist.angular.x = eulerAngle_velocity(2);
 
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
     odom.child_frame_id = odom_child_frame_id;
@@ -910,8 +916,8 @@ private:
     cpm.match_value = MatchValue;
 
     // 暂定
-    // cpm.iRegionID = iRegionID;
-    // cpm.iMapID = iMapID;
+    cpm.iRegionID = iRegionID;
+    cpm.iMapID = iMapID;
     keda_current_pub.publish(cpm);
 
     // 把这个 定位成功的 位姿记录下来
@@ -936,11 +942,11 @@ private:
     // yaw = tf::getYaw(odom.pose.pose.orientation) * 180.0 / 3.14159;
 
     std::ostringstream ossx;
-    ossx << setiosflags(std::ios::fixed) << std::setprecision(2) << odom.pose.pose.position.x;
+    ossx << setiosflags(std::ios::fixed) << std::setprecision(3) << odom.pose.pose.position.x;
     std::string xs = ossx.str();
 
     std::ostringstream ossy;
-    ossy << setiosflags(std::ios::fixed) << std::setprecision(2) << odom.pose.pose.position.y;
+    ossy << setiosflags(std::ios::fixed) << std::setprecision(3) << odom.pose.pose.position.y;
     std::string ys = ossy.str();
 
     std::ostringstream ossyaw;
