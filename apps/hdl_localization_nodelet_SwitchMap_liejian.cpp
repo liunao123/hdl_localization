@@ -328,6 +328,13 @@ private:
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     downsample_filter = voxelgrid;
 
+    rangeMinX = private_nh.param<double>("rangeMinX", -250);
+    rangeMaxX = private_nh.param<double>("rangeMaxX", -250);
+    rangeMinY = private_nh.param<double>("rangeMinY", -250);
+    rangeMaxY = private_nh.param<double>("rangeMaxY", -250);
+    rangeMinZ = private_nh.param<double>("rangeMinZ", -250);
+    rangeMaxZ = private_nh.param<double>("rangeMaxZ", 250);
+
     dzlog_info("create registration method for localization");
     registration = create_registration();
 
@@ -690,7 +697,7 @@ private:
     dzlog_info(" start to find z from initialpose ." );
     for (int i = 0; i < globalmap->size(); i += 10) {
       const auto& pt = globalmap->at(i);
-      if( std::fabs(px - pt.x) < 1.0 && std::fabs(py - pt.y) < 0.50  ) // 更普遍 3m以内的点取均值
+      if( std::fabs(px - pt.x) < 2.0 && std::fabs(py - pt.y) < 2.0  ) // 更普遍 3m以内的点取均值
       {
         acc_z  += globalmap->points[ i ].z;
         k_indices.push_back( i );
@@ -783,29 +790,28 @@ private:
 
     // ROS_WARN(" pc size() %d ", filtered->size());
     // 保留机器人上下 2m 以内的点，其余的点可能会打在 列车上(如果有)，无法使用。
-    float range = 150.0;
     static pcl::CropBox<PointT> cropBoxFilter_temp(true);
     cropBoxFilter_temp.setInputCloud(filtered);
-    cropBoxFilter_temp.setMin(Eigen::Vector4f(-range, -range, -range, 1.0f));
-    cropBoxFilter_temp.setMax(Eigen::Vector4f(range, range, range, 1.0f));
+  
+    cropBoxFilter_temp.setMin(Eigen::Vector4f(rangeMinX, rangeMinY, rangeMinZ, 1.0f));
+    cropBoxFilter_temp.setMax(Eigen::Vector4f(rangeMaxX, rangeMaxY, rangeMaxZ, 1.0f));
     cropBoxFilter_temp.setNegative(false);
     cropBoxFilter_temp.filter(*filtered);
     
     // 去除距离很近的点
-    range = 1.0;
+    float range = 1.0;
     cropBoxFilter_temp.setMin(Eigen::Vector4f(-range, -range, -range, 1.0f));
     cropBoxFilter_temp.setMax(Eigen::Vector4f(range, range, range, 1.0f));
     cropBoxFilter_temp.setNegative(true);
     cropBoxFilter_temp.setInputCloud(filtered);
     cropBoxFilter_temp.filter(*filtered);
 
-    // 如果有车，这个范围内是打在车上的点
-    cropBoxFilter_temp.setMin(Eigen::Vector4f(-500, -500, 1.50, 1.0f));
+    // 如果有车，这个范围内是打在车上的点 要去除
+    cropBoxFilter_temp.setMin(Eigen::Vector4f(-500, -500, 2.0, 1.0f));
     cropBoxFilter_temp.setMax(Eigen::Vector4f(500, 500, 4.50, 1.0f));
     cropBoxFilter_temp.setNegative(true);
     cropBoxFilter_temp.setInputCloud(filtered);
     cropBoxFilter_temp.filter(*filtered);
-
 
     // ROS_WARN(" CropBox pc size() %d ", filtered->size());
 
@@ -949,13 +955,27 @@ private:
     ossy << setiosflags(std::ios::fixed) << std::setprecision(3) << odom.pose.pose.position.y;
     std::string ys = ossy.str();
 
+    std::ostringstream ossz;
+    ossz << setiosflags(std::ios::fixed) << std::setprecision(3) << odom.pose.pose.position.z;
+    std::string zs = ossz.str();
+
+    std::ostringstream ossroll;
+    ossroll << setiosflags(std::ios::fixed) << std::setprecision(1) << roll;
+
+    std::ostringstream osspitch;
+    osspitch << setiosflags(std::ios::fixed) << std::setprecision(1) << pitch;
+    // std::string pitch = osspitch.str();
+
     std::ostringstream ossyaw;
     ossyaw << setiosflags(std::ios::fixed) << std::setprecision(1) << yaw;
-    std::string yaws = ossyaw.str();
+    // std::string yaws = ossyaw.str();
 
     std_msgs::String str_temp;
 
-    str_temp.data = "x: " + xs + " y: " + ys + " yaw:" + yaws;
+    // str_temp.data = "x: " + xs + "m y: " + ys + "m z: " + zs + "m yaw:" + yaws;
+    str_temp.data = "x:  " + xs + "m y: " + ys + "m z: " + zs + "m ";
+    str_temp.data += "roll: " + ossroll.str() +"° pitch: " + osspitch.str() +"° yaw: " + ossyaw.str() +"°";
+
     string_pub.publish(str_temp);
     dzlog_info("x,y,z,rpy(deg) is :%0.3f , %0.3f , %0.3f , %0.3f , %0.3f , %0.3f , %0.2f. MatchValue is: %f.",stamp.toSec(), odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z , roll, pitch, yaw , MatchValue );
 
@@ -1169,6 +1189,8 @@ private:
   nav_msgs::Odometry last_odom_pose;
   Eigen::Isometry3d last_pose_eigen;
   bool use_odom_flag = false;
+  float rangeMinX = -250 , rangeMinY = -250 , rangeMinZ = -250 ;
+  float rangeMaxX = 250 , rangeMaxY = 250 , rangeMaxZ = 250 ;
 };
 }  // namespace hdl_localization
 
