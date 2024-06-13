@@ -101,3 +101,6 @@ target_link_libraries(globalmap_server_nodelet
   ${PCL_LIBRARIES}
 )
 
+SET(src_file odom2tf)
+add_executable (${src_file} apps/${src_file}.cpp )
+target_link_libraries (${src_file} ${catkin_LIBRARIES} )
