@@ -2,9 +2,9 @@
 #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
 
-static std::string topic = "/odom_raw";
+static std::string topic = "/Odometry";
 static std::string parent_frame = "odom";
-static std::string child_frame = "base_footprint";
+static std::string child_frame = "base_link";
 
 void odom_callback(const nav_msgs::OdometryConstPtr& odom){
   static tf::TransformBroadcaster br;

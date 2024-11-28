@@ -1,18 +1,22 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(hdl_localization)
 
-set(CMAKE_BUILD_TYPE "RELEASE")
-
-# -mavx causes a lot of errors!!
-if("$ENV{ROS_DISTRO}" STRGREATER "melodic")
-  add_definitions(-std=c++17 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2)
-  set(CMAKE_CXX_FLAGS "-std=c++17 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+  add_definitions(-std=c++11)
+  set(CMAKE_CXX_FLAGS "-std=c++11")
 else()
-  add_definitions(-std=c++11 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2)
-  set(CMAKE_CXX_FLAGS "-std=c++11 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2")
+	# -mavx causes a lot of errors!!
+  if("$ENV{ROS_DISTRO}" STRGREATER "melodic")
+    add_definitions(-std=c++17 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2)
+    set(CMAKE_CXX_FLAGS "-std=c++17 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2")
+  else()
+    add_definitions(-std=c++11 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2)
+    set(CMAKE_CXX_FLAGS "-std=c++11 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2")
+  endif()
 endif()
 
 # pcl 1.7 causes a segfault when it is built with debug mode
+set(CMAKE_BUILD_TYPE "RELEASE")
 
 find_package(catkin REQUIRED COMPONENTS
   nodelet
@@ -42,12 +46,6 @@ add_definitions(${PCL_DEFINITIONS})
 message(STATUS "PCL_INCLUDE_DIRS:" ${PCL_INCLUDE_DIRS})
 message(STATUS "PCL_LIBRARY_DIRS:" ${PCL_LIBRARY_DIRS})
 message(STATUS "PCL_DEFINITIONS:" ${PCL_DEFINITIONS})
-
-# Find yaml-cpp package
-find_package(yaml-cpp REQUIRED)
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -84,13 +82,15 @@ include_directories(
 # nodelets
 add_library(hdl_localization_nodelet
   src/hdl_localization/pose_estimator.cpp
-  apps/hdl_localization_nodelet.cpp
-  # apps/hdl_localization_nodelet_SM.cpp
+  # apps/hdl_localization_nodelet_SwitchMap_dog.cpp
+  apps/hdl_localization_nodelet_SwitchMap_liejian.cpp
+  # apps/hdl_localization_nodelet.cpp
 )
 target_link_libraries(hdl_localization_nodelet
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   yaml-cpp
+  libzlog.a
 )
 add_dependencies(hdl_localization_nodelet ${PROJECT_NAME}_gencpp)
 
@@ -99,6 +99,7 @@ add_library(globalmap_server_nodelet apps/globalmap_server_nodelet.cpp)
 target_link_libraries(globalmap_server_nodelet
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  libzlog.a
 )
 
 SET(src_file odom2tf)

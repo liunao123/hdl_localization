@@ -1,27 +1,29 @@
 <?xml version="1.0"?>
 <launch>
 
-  <param name="use_sim_time" value="true" />
+  <param name="/use_sim_time" value="true" />
 
   <!-- arguments -->
-  <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
-  <arg name="points_topic" default="/rslidar_points" />
-  <!-- <arg name="points_topic" default="/undis_pc" /> -->
-  <!-- <arg name="points_topic" default="/lio_sam/deskew/cloud_deskewed" /> -->
+  <arg name="nodelet_manager" default="rs_nodelet_manager" />
+  <!-- <arg name="points_topic" default="/velodyne_points" /> -->
+  <arg name="points_topic" default="/livox_pc2" />
+  <!-- <arg name="points_topic" default="/undistort_laser" /> -->
+  <!-- <arg name="points_topic" default="/laser_cloud_flat" /> -->
 
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
-  <arg name="odom_child_frame_id" default="imu" />
+  <arg name="odom_child_frame_id" default="base_footprint" />
 
   <arg name="enable_robot_odometry_prediction" value="true" />
   <!-- 使用里程计的时候，这个才会有用 -->
-  <arg name="robot_odom_frame_id" value="world" />
+  <arg name="robot_odom_frame_id" value="odom" />
 
   <!-- optional arguments -->
   <arg name="use_imu" default="true" />
   <arg name="invert_imu_acc" default="false" />
   <arg name="invert_imu_gyro" default="false" />
   <arg name="use_global_localization" default="false" />
+  <!-- <arg name="imu_topic" default="/imu_data" /> -->
   <arg name="imu_topic" default="/livox/imu" />
 
   <arg name="plot_estimation_errors" value="false" />
@@ -30,10 +32,11 @@
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
     <!-- hdl_localization_nodelet -->
-    <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+    <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" output="screen" required="true" args="standalone  hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
       <remap from="/velodyne_points" to="$(arg points_topic)" />
       <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
       <remap from="aligned_points" to="/csg_fixed_laser" />
+      <remap from="current_pose" to="/current_pose_hdl" />
 
       <!-- odometry frame_id -->
       <param name="odom_child_frame_id" value="$(arg odom_child_frame_id)" />
@@ -42,7 +45,7 @@
       <param name="use_imu" value="$(arg use_imu)" />
       <param name="invert_acc" value="$(arg invert_imu_acc)" />
       <param name="invert_gyro" value="$(arg invert_imu_gyro)" />
-      <param name="cool_time_duration" value="5.0" />
+      <param name="cool_time_duration" value="2.0" />
       <!-- robot odometry-based prediction -->
       <param name="enable_robot_odometry_prediction" value="$(arg enable_robot_odometry_prediction)" />
       <param name="robot_odom_frame_id" value="$(arg robot_odom_frame_id)" />
@@ -52,12 +55,11 @@
       <!-- if NDT is slow for your PC, try DIRECT1 serach method, which is a bit unstable but extremely fast -->
       <param name="ndt_neighbor_search_method" value="DIRECT7" />
 
-      <param name="ndt_neighbor_search_radius" value="1.0" />
       <!-- <param name="ndt_resolution" value="0.5" />
       <param name="downsample_resolution" value="0.05" />
 
       <param name="max_correspondence_dist" value="0.15" />
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" /> -->
+      <param name="loc_success_threshold" value="0.6" /> -->
 
       <!-- <param name="ndt_neighbor_search_radius" value="0.45" />   0.45 less 0.5 -->
       
@@ -65,31 +67,34 @@
       <!-- 越大，远处的点 所占比重越大，定位越准确 --><!-- 
       <param name="downsample_resolution" value="0.2" />  0.25 is ok 
       <param name="max_correspondence_dist" value="0.15" /> -->   <!--
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.0" />     
+      <param name="loc_success_threshold" value="0.0" />     
       <param name="ndt_resolution" value="0.75" />  0.2  0.3~0.5 
       <param name="ndt_stepsize" value="0.2" />  -->
       <!-- 以上参数不动，坑道外定位测试效果良好 -->
 
       <!-- 园区测试效果良好 -->  <!-- 0.25 is ok -->
-      <!-- <param name="downsample_resolution" value="0.3" />  
-      <param name="max_correspondence_dist" value="0.3" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" />
-      <param name="ndt_stepsize" value="0.3" />
-      <param name="ndt_resolution" value="1.0" /> -->
+      <param name="downsample_resolution" value="0.1" />  
+      <param name="max_correspondence_dist" value="0.25" /> 
+      <param name="loc_success_threshold" value="0.85" />
+      <param name="ndt_neighbor_search_radius" value="1.50" />
+      <param name="ndt_stepsize" value="0.1" />
+      <param name="ndt_resolution" value="0.750" />
 
       <!-- 江杨北路 -->
       <!-- <param name="downsample_resolution" value="0.2" />   
       <param name="max_correspondence_dist" value="0.3" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.6" /> -->
+      <param name="loc_success_threshold" value="0.6" /> -->
      <!-- <param name="ndt_stepsize" value="0.2" />     //  0.2  0.3~0.5  0.25 -->
      <!-- <param name="ndt_resolution" value="1.20" />  //  0.2  0.3~0.5  1.0 -->
 
-      <!-- liejian at sys -->  <!-- 0.25 is ok -->
-      <param name="downsample_resolution" value="0.1" />  
-      <param name="max_correspondence_dist" value="0.075" /> 
-      <param name="LOC_SUCCESS_THRESHLOD" value="0.7" />
-      <param name="ndt_stepsize" value="0.1" />
-      <param name="ndt_resolution" value="0.50" />
+
+      <!-- liejian at changzhou 8 股道-->  <!-- 0.25 is ok -->
+      <!-- <param name="downsample_resolution" value="0.1" />
+      <param name="max_correspondence_dist" value="0.3" /> 
+      <param name="loc_success_threshold" value="0.6" /> -->
+      <!-- <param name="ndt_neighbor_search_radius" value="1.0" />   1.0 -->
+      <!-- <param name="ndt_stepsize" value="0.2" />  0.5 -->
+      <!-- <param name="ndt_resolution" value="0.40" />   1.2 -->
 
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
       <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
@@ -111,10 +116,11 @@
     <!-- <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" /> -->
 
     <!-- 是否使用里程计，内部通过 TF 实现的 -->
-	  <group if="$(arg enable_robot_odometry_prediction)">
-      <!-- <include file="$(find fast_livo)/launch/mapping_v2_locate.launch" /> -->
-      <include file="$(find fast_livo)/launch/mapping_v2_liejian.launch" />
-	  </group>
+    <group if="$(arg enable_robot_odometry_prediction)">
+      <!-- <include file="$(find fast_livo)/launch/mapping_v2_liejian_locate.launch" /> -->
+      <!-- <include file="$(find fast_livo)/launch/mapping_v1.launch" /> -->
+      <include file="$(find faster_lio)/launch/mapping_avia.launch" />
+    </group>
 
     <!-- 加载全局点云地图 -->
     <!-- <include file="$(find hdl_localization)/launch/load_global_map.launch" /> -->
@@ -125,7 +131,25 @@
     <!-- <node pkg="tf" type="static_transform_publisher" name="tf_imu_livox"  args="0.081677, 0.168409, 0.141423 -0.0029418, -0.0025618, -0.0065382, 0.999971 imu livox  100"/>  -->
 
     <!-- V2 liejian -->
-    <node pkg="tf" type="static_transform_publisher" name="tf_lidar2imu" args="0.006236   -0.025549   0.088329  0.0056564, 0.0035976, 0.0035394, 0.9999713 imu velodyne  100"/>
+    <!-- <node pkg="tf" type="static_transform_publisher" name="tf_lidar2imu" args="0.006236   -0.025549   0.088329  0.0056564, 0.0035976, 0.0035394, 0.9999713 imu wlr_720  100"/>
+  	<node pkg="tf" type="static_transform_publisher" name="base_link2imu" args="0.409 0 0.42 0.0 0.0 0.0 base_link  imu 100"/> -->
+	
+    <!-- <rosparam command="load" file="/opt/csg/slam/navs/param/lio_config.yaml" /> -->
+   	<!-- <node pkg="fast_livo" type="feature_extract" name="feature_extract" output="screen" /> -->
+   	<!-- <node pkg="fast_livo" type="livox_to_pointcloud2" name="livox_to_pointcloud2" output="screen" /> -->
+
+    <!-- avia -->
+    <!-- <node pkg="tf" type="static_transform_publisher" name="base_link2imu" args="0.04165 0.02326 -0.0284  0.0 0.0 0.0 lidar  livox_frame 100"/> -->
+
+    <!-- horizonal -->
+  	<!-- <node pkg="tf" type="static_transform_publisher" name="base_link2imu" args="0.05512 0.02226  -0.0297  0.0 0.0 0.0 lidar  livox_frame 100"/> -->
+  	<!-- <node pkg="tf" type="static_transform_publisher" name="base_link2lidar1" args="0.0 0.0 0.0  0.0 0.0 0.0 base_footprint lidar 100"/> -->
+
+    <!-- <node pkg="rosbag" type="play" name="bag_play"  required="true"  output="screen"  args="/home/bag/sync/avia_sichuan_lj_20240520/bag/v1_avia_hk_sync_langjiu_20240522_B2-4.bag  -d 3  -s 400   -r 1  "/>    -->
+    <!-- <node pkg="rosbag" type="play" name="bag_play"  required="true"  output="screen"  args="/home/bag/sc_lj_202303/nj_2023-03-08-16-09-10.bag  -d 3  -s 0 -clock "/>    -->
+    <!-- <node pkg="rosbag" type="play" name="bag_play"  required="true"  output="screen"  args="/home/bag/sync/v1_avia_hk_20241107/v1_avia_hk_20241113.bag  -d  3  -s 0 -r 0.3  "/>    -->
+    <node pkg="rosbag" type="play" name="bag_play"  required="true"  output="screen"  args="/home/bag/sync/v1_avia_hk_20241107/output.bag  -d  3  -s 0   --clock "/>   
+
 
 
 </launch>

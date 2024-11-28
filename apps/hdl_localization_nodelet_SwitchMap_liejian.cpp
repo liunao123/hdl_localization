@@ -1,19 +1,18 @@
 #include <mutex>
 #include <memory>
 #include <iostream>
-#include <iomanip>
-#include <ctime>
 
 #include <ros/ros.h>
+#include <pcl_ros/point_cloud.h>
+#include <pcl_ros/transforms.h>
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
+
 #include <tf2_eigen/tf2_eigen.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <tf2/convert.h>
 #include <eigen_conversions/eigen_msg.h>
-// #include <Eigen/Geometry.h>
 
 #include <std_msgs/Float32.h>
 #include <std_msgs/String.h>
@@ -40,6 +39,7 @@
 
 #include <hdl_localization/pose_estimator.hpp>
 #include <hdl_localization/delta_estimater.hpp>
+
 #include <hdl_localization/ScanMatchingStatus.h>
 #include <hdl_global_localization/SetGlobalMap.h>
 #include <hdl_global_localization/QueryGlobalLocalization.h>
@@ -125,7 +125,6 @@ private:
       pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
       ndt->setTransformationEpsilon(0.01);
       ndt->setResolution(ndt_resolution);
-
       ndt->setNumThreads(10);
       double ndt_setStepSize = private_nh.param<double>("ndt_stepsize", 0.1);  // 默认0.1
       ndt->setStepSize(ndt_setStepSize);
@@ -146,12 +145,12 @@ private:
         ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
       }
       return ndt;
-    } else if (reg_method.find("NDT_CUDA") != std::string::npos) {
+    } else if(reg_method.find("NDT_CUDA") != std::string::npos) {
       NODELET_INFO("NDT_CUDA is selected");
       boost::shared_ptr<fast_gicp::NDTCuda<PointT, PointT>> ndt(new fast_gicp::NDTCuda<PointT, PointT>);
       ndt->setResolution(ndt_resolution);
 
-      if (reg_method.find("D2D") != std::string::npos) {
+      if(reg_method.find("D2D") != std::string::npos) {
         ndt->setDistanceMode(fast_gicp::NDTDistanceMode::D2D);
       } else if (reg_method.find("P2D") != std::string::npos) {
         ndt->setDistanceMode(fast_gicp::NDTDistanceMode::P2D);
@@ -294,9 +293,7 @@ private:
       float mean_z = get_z_from_map_by_xy( poseX, poseY );
       dzlog_info("@@@@@@ loadLastestPose() from init.yaml. init_x = %f,y = %f,z<computed> = %f,  yaw = %f", poseX, poseY, mean_z , poseYaw);
 
-      pose_estimator.reset(new hdl_localization::PoseEstimator(
-        registration,
-        ros::Time::now(),
+      pose_estimator.reset(new hdl_localization::PoseEstimator(registration,
         Eigen::Vector3f(poseX, poseY, mean_z),
         Eigen::Quaternionf(cos(poseYaw / 2.0), 0, 0, sin(poseYaw / 2.0)),
         private_nh.param<double>("cool_time_duration", 0.5)));
@@ -306,9 +303,7 @@ private:
       if (private_nh.param<bool>("specify_init_pose", true)) {
         NODELET_INFO("initialize pose estimator with specified parameters!!");
         dzlog_info("@@@@@@ load init Pose() from rosparam , init_pos_x = %f, init_pos_y = %f, init_pos_z = %f ...... " , private_nh.param<double>("init_pos_x", 0.0) , private_nh.param<double>("init_pos_y", 0.0) , private_nh.param<double>("init_pos_z", 0.0));
-        pose_estimator.reset(new hdl_localization::PoseEstimator(
-          registration,
-          ros::Time::now(),
+        pose_estimator.reset(new hdl_localization::PoseEstimator(registration,
           Eigen::Vector3f(private_nh.param<double>("init_pos_x", 0.0), private_nh.param<double>("init_pos_y", 0.0), private_nh.param<double>("init_pos_z", 0.0)),
           Eigen::Quaternionf(
             private_nh.param<double>("init_ori_w", 1.0),
@@ -329,9 +324,9 @@ private:
     downsample_filter = voxelgrid;
 
     rangeMinX = private_nh.param<double>("rangeMinX", -250);
-    rangeMaxX = private_nh.param<double>("rangeMaxX", -250);
+    rangeMaxX = private_nh.param<double>("rangeMaxX", 250);
     rangeMinY = private_nh.param<double>("rangeMinY", -250);
-    rangeMaxY = private_nh.param<double>("rangeMaxY", -250);
+    rangeMaxY = private_nh.param<double>("rangeMaxY", 250);
     rangeMinZ = private_nh.param<double>("rangeMinZ", -250);
     rangeMaxZ = private_nh.param<double>("rangeMaxZ", 250);
 
@@ -341,12 +336,21 @@ private:
     // global localization
     dzlog_info("create registration method for fallback during relocalization");
     relocalizing = false;
-	  relocate = true;
+    relocate = true;
 
     wait_tf_duration =  ros::Duration(0.05);
 
     delta_estimater.reset(new DeltaEstimater(create_registration()));
 
+    // initialize pose estimator
+    if(private_nh.param<bool>("specify_init_pose", true)) {
+      NODELET_INFO("initialize pose estimator with specified parameters!!");
+      pose_estimator.reset(new hdl_localization::PoseEstimator(registration,
+        Eigen::Vector3f(private_nh.param<double>("init_pos_x", 0.0), private_nh.param<double>("init_pos_y", 0.0), private_nh.param<double>("init_pos_z", 0.0)),
+        Eigen::Quaternionf(private_nh.param<double>("init_ori_w", 1.0), private_nh.param<double>("init_ori_x", 0.0), private_nh.param<double>("init_ori_y", 0.0), private_nh.param<double>("init_ori_z", 0.0)),
+        private_nh.param<double>("cool_time_duration", 0.5)
+      ));
+    }
   }
 
 private:
@@ -371,12 +375,6 @@ private:
         cnt_lidar = 0;
         dzlog_info("iNavType != 5 , DO NOT USE HDL localization type , return ......");
       }
-      return;
-    }
-
-    std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
-    if (!pose_estimator) {
-      dzlog_info("waiting for initial pose input!!");
       return;
     }
 
@@ -411,38 +409,44 @@ private:
     static Eigen::Matrix4f TF_temp = Eigen::Matrix4f::Identity();
     static bool get_tf_ok = false;
 
-    if ( !get_tf_ok )
-    {
-      // tf 是静态的，等待时间长一点也无所谓
-      try {
-        if (tf_buffer.canTransform(odom_child_frame_id, points_frame, ros::Time(0), ros::Duration(0.5), &tfError)) {
-          geometry_msgs::TransformStamped TF_lidar2odom_child_frame = tf_buffer.lookupTransform(odom_child_frame_id, points_frame,  ros::Time(0) , ros::Duration(0.5));
-          TF_temp = tf2::transformToEigen(TF_lidar2odom_child_frame).cast<float>().matrix();
-		      //std::cout <<  TF_temp  << std::endl;
-          get_tf_ok = true;
-          dzlog_info(" get transformed success . between %s . and : %s ", odom_child_frame_id.c_str(), points_frame.c_str() );
-        } else {
-          dzlog_info("cannot be transformed . odom_child_frame_id is %s . points_frame : %s . may use Identity()", odom_child_frame_id.c_str(), points_frame.c_str());
-        }
-      } catch (tf::TransformException& ex) {
-        dzlog_info("%s", ex.what());
-        dzlog_info(tfError.c_str());
-        // return;
-      }
-    }
+    // if ( !get_tf_ok )
+    // {
+    //   // tf 是静态的，等待时间长一点也无所谓
+    //   try {
+    //     if (tf_buffer.canTransform(odom_child_frame_id, points_frame, ros::Time(0), ros::Duration(0.5), &tfError)) {
+    //       geometry_msgs::TransformStamped TF_lidar2odom_child_frame = tf_buffer.lookupTransform(odom_child_frame_id, points_frame,  ros::Time(0) , ros::Duration(0.5));
+    //       TF_temp = tf2::transformToEigen(TF_lidar2odom_child_frame).cast<float>().matrix();
+		//       //std::cout <<  TF_temp  << std::endl;
+    //       get_tf_ok = true;
+    //       dzlog_info(" get transformed success . between %s . and : %s ", odom_child_frame_id.c_str(), points_frame.c_str() );
+    //     } else {
+    //       dzlog_info("cannot be transformed . odom_child_frame_id is %s . points_frame : %s . may use Identity()", odom_child_frame_id.c_str(), points_frame.c_str());
+    //     }
+    //   } catch (tf::TransformException& ex) {
+    //     dzlog_info("%s", ex.what());
+    //     dzlog_info(tfError.c_str());
+    //     // return;
+    //   }
+    // }
 
     // exe transform points
 		pcl::transformPointCloud(*pcl_cloud, *cloud, TF_temp);
 		// cloud->header.frame_id = odom_child_frame_id;
+    // dzlog_info("pl_orig->size()is %d",  cloud->points.size());
 
     auto filtered = downsample(cloud);
 
     last_scan = filtered;
 
-    // if (relocalizing) {
-    // delta_estimater->add_frame(filtered);
-    // }
+    if(relocalizing) {
+      delta_estimater->add_frame(filtered);
+    }
 
+    std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
+    if(!pose_estimator) {
+      NODELET_ERROR("waiting for initial pose input!!");
+      return;
+    }
     Eigen::Matrix4f before = pose_estimator->matrix();
 
     // predict
@@ -460,11 +464,13 @@ private:
         const auto& gyro = (*imu_iter)->angular_velocity;
         double acc_sign = invert_acc ? -1.0 : 1.0;
         double gyro_sign = invert_gyro ? -1.0 : 1.0;
-        // if ( std::fabs(acc.x) > 10 || std::fabs(acc.y) > 10 || std::fabs(acc.z-10) > 10 || std::fabs(gyro.x) > 0.25 || std::fabs(gyro.y) > 0.25 || std::fabs(gyro.z) > 0.25 )
+        // if ( std::fabs(acc.x) > 10 || std::fabs(acc.y) > 10 || std::fabs(acc.z-10) > 10 || std::fabs(gyro.x) > 1 || std::fabs(gyro.y) > 1 || std::fabs(gyro.z) > 1 )
+        // if ( std::fabs(gyro.x) > 1 || std::fabs(gyro.y) > 1 || std::fabs(gyro.z) > 1 )
         // {
         //   continue;
         // }
-        pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
+        // pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z) , gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
+        pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z) * 9.80665 , gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
     }
@@ -500,9 +506,10 @@ private:
     // ! todo 20231010 直接使用里程计补偿定位
     // ? done 20231030 利用 robot_pose_ekf 融合后的里程计补偿完毕 test DONE
     // ! 
-    int low_points_thresh = private_nh.param<int>("low_points_thresh", 1000);
+    int low_points_thresh = private_nh.param<int>("low_points_thresh", 10);
     // ！重定位的时候，不进行里程计补偿
-    if ( (filtered->points.size() < low_points_thresh)  &&  ("livox" == points_frame) && ( !relocate )   )
+    // if ( (filtered->points.size() < low_points_thresh)  &&  ("livox" == points_frame) && ( !relocate )   )
+    if ( 0  )
     {
       pcl::PointCloud<pcl::PointXYZI>::Ptr tt(new pcl::PointCloud<pcl::PointXYZI>());
       aligned = pose_estimator->correct(stamp, tt);
@@ -588,7 +595,6 @@ private:
       aligned_pub.publish(aligned);
     }
 
-    // dzlog_info("locate use time is %lf  s", ros::Time::now().toSec() - s_t.toSec());
   }
 
   /**
@@ -637,7 +643,7 @@ private:
     pcl::toROSMsg(*scan, srv.request.cloud);
     srv.request.max_num_candidates = 1;
 
-    if (!query_global_localization_service.call(srv) || srv.response.poses.empty()) {
+    if(!query_global_localization_service.call(srv) || srv.response.poses.empty()) {
       relocalizing = false;
       NODELET_INFO_STREAM("global localization failed");
       return false;
@@ -659,7 +665,6 @@ private:
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
-      ros::Time::now(),
       pose.translation(),
       Eigen::Quaternionf(pose.linear()),
       private_nh.param<double>("cool_time_duration", 0.5)));
@@ -751,7 +756,7 @@ private:
   	dzlog_info(" keep relocate =  true for 0.1s ");
 
     // 手动指定 机器人的高  
-	  // 当重定位的时候 自动计算出来地图上 该位置附近一定范围内地面点的高度 取均值来作为机器人的高度值
+    // 当重定位的时候 自动计算出来地图上 该位置附近一定范围内地面点的高度 取均值来作为机器人的高度值
     if (!globalmap) {
       ROS_WARN("globalmap has not been received!!");
     }
@@ -765,7 +770,7 @@ private:
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
-      ros::Time::now(),
+
       Eigen::Vector3f(p.x, p.y, mean_z),
       Eigen::Quaternionf(q.w, q.x, q.y, q.z),
       private_nh.param<double>("cool_time_duration", 0.5)));
@@ -785,19 +790,18 @@ private:
     }
 
     pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
-    downsample_filter->setInputCloud(cloud);
-    downsample_filter->filter(*filtered);
 
     // ROS_WARN(" pc size() %d ", filtered->size());
     // 保留机器人上下 2m 以内的点，其余的点可能会打在 列车上(如果有)，无法使用。
-    static pcl::CropBox<PointT> cropBoxFilter_temp(true);
-    cropBoxFilter_temp.setInputCloud(filtered);
+    static pcl::CropBox<PointT> cropBoxFilter_temp(false);
   
     cropBoxFilter_temp.setMin(Eigen::Vector4f(rangeMinX, rangeMinY, rangeMinZ, 1.0f));
     cropBoxFilter_temp.setMax(Eigen::Vector4f(rangeMaxX, rangeMaxY, rangeMaxZ, 1.0f));
     cropBoxFilter_temp.setNegative(false);
+    cropBoxFilter_temp.setInputCloud(cloud);
     cropBoxFilter_temp.filter(*filtered);
     
+    // ROS_WARN(" pc size() %d ", filtered->size());
     // 去除距离很近的点
     float range = 1.0;
     cropBoxFilter_temp.setMin(Eigen::Vector4f(-range, -range, -range, 1.0f));
@@ -806,16 +810,9 @@ private:
     cropBoxFilter_temp.setInputCloud(filtered);
     cropBoxFilter_temp.filter(*filtered);
 
-    // 如果有车，这个范围内是打在车上的点 要去除
-    cropBoxFilter_temp.setMin(Eigen::Vector4f(-500, -500, 2.0, 1.0f));
-    cropBoxFilter_temp.setMax(Eigen::Vector4f(500, 500, 4.50, 1.0f));
-    cropBoxFilter_temp.setNegative(true);
-    cropBoxFilter_temp.setInputCloud(filtered);
-    cropBoxFilter_temp.filter(*filtered);
-
-    // ROS_WARN(" CropBox pc size() %d ", filtered->size());
-
-    // filtered->header = cloud->header;
+    downsample_filter->setInputCloud(filtered);
+    downsample_filter->filter(*filtered);
+    filtered->header = cloud->header;
 
     return filtered;
   }
@@ -832,14 +829,13 @@ private:
       return;
     }
     // broadcast the transform over tf
-    if (tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
+    if(tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
       geometry_msgs::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
       map_wrt_frame.header.stamp = stamp;
       map_wrt_frame.header.frame_id = odom_child_frame_id;
       map_wrt_frame.child_frame_id = "map";
 
       geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0), ros::Duration(0.1));
-
       Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
 
       geometry_msgs::TransformStamped map_wrt_odom;
@@ -857,10 +853,7 @@ private:
 
       tf_broadcaster.sendTransform(odom_trans);
 
-      // dzlog_info("one use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
       // dzlog_info(" two TM xyz is %lf, %lf, %lf ", odom_trans.transform.translation.x,  odom_trans.transform.translation.y, odom_trans.transform.translation.z );
-
-      // s_t = ros::Time::now();
 
       /*
       // 后到前的变换据矩阵， T_mb : body frame 到 map frame
@@ -877,19 +870,15 @@ private:
       TM.header.frame_id = "map";
       TM.child_frame_id = robot_odom_frame_id;
       tf_broadcaster.sendTransform(TM);
-      // dzlog_info("two use time is %lf  s",  ros::Time::now().toSec() - s_t.toSec()  ) ;
       // dzlog_info(" pub  TM : %s",robot_odom_frame_id.c_str()  );
       // dzlog_info(" two TM xyz is %lf, %lf, %lf ", TM.transform.translation.x,  TM.transform.translation.y, TM.transform.translation.z );
       */
     } else {
-      // if (private_nh.param<bool>("/hdl_localization_nodelet/enable_robot_odometry_prediction", false)) {
-      // dzlog_info("%s,  %s",robot_odom_frame_id.c_str() , odom_child_frame_id.c_str());
       geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
       odom_trans.header.stamp = stamp;
       odom_trans.header.frame_id = "map";
       odom_trans.child_frame_id = odom_child_frame_id;
       tf_broadcaster.sendTransform(odom_trans);
-      // }
     }
 
     // publish the transform
@@ -931,7 +920,6 @@ private:
     
     // 把这个时间戳记录下来
     last_odom_pose.header = odom.header;
-    // last_odom_pose.pose.pose = odom.pose.pose;
 
     static std_msgs::Float32 confidence;
     confidence.data = MatchValue * 100;
@@ -972,9 +960,9 @@ private:
 
     std_msgs::String str_temp;
 
-    // str_temp.data = "x: " + xs + "m y: " + ys + "m z: " + zs + "m yaw:" + yaws;
-    str_temp.data = "x:  " + xs + "m y: " + ys + "m z: " + zs + "m ";
-    str_temp.data += "roll: " + ossroll.str() +"° pitch: " + osspitch.str() +"° yaw: " + ossyaw.str() +"°";
+    str_temp.data = "x: " + xs + "m y: " + ys + "m z: " + zs + "m yaw:" + ossyaw.str() + "°";
+    // str_temp.data = "x:  " + xs + "m y: " + ys + "m z: " + zs + "m ";
+    // str_temp.data += "roll: " + ossroll.str() +"° pitch: " + osspitch.str() +"° yaw: " + ossyaw.str() + "°";
 
     string_pub.publish(str_temp);
     dzlog_info("x,y,z,rpy(deg) is :%0.3f , %0.3f , %0.3f , %0.3f , %0.3f , %0.3f , %0.2f. MatchValue is: %f.",stamp.toSec(), odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z , roll, pitch, yaw , MatchValue );
@@ -1018,24 +1006,25 @@ private:
     }
     status.inlier_fraction = static_cast<float>(num_inliers) / aligned->size();
     status.relative_pose = tf2::eigenToTransform(Eigen::Isometry3d(registration->getFinalTransformation().cast<double>())).transform;
+
     status.prediction_labels.reserve(2);
     status.prediction_errors.reserve(2);
 
     std::vector<double> errors(6, 0.0);
 
-    if (pose_estimator->wo_prediction_error()) {
+    if(pose_estimator->wo_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = "without_pred";
       status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->wo_prediction_error().get().cast<double>())).transform);
     }
 
-    if (pose_estimator->imu_prediction_error()) {
+    if(pose_estimator->imu_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = use_imu ? "imu" : "motion_model";
       status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->imu_prediction_error().get().cast<double>())).transform);
     }
 
-    if (pose_estimator->odom_prediction_error()) {
+    if(pose_estimator->odom_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = "odom";
       status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->odom_prediction_error().get().cast<double>())).transform);

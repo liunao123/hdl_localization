@@ -295,7 +295,6 @@ private:
 
       pose_estimator.reset(new hdl_localization::PoseEstimator(
         registration,
-        ros::Time::now(),
         Eigen::Vector3f(poseX, poseY, mean_z),
         Eigen::Quaternionf(cos(poseYaw / 2.0), 0, 0, sin(poseYaw / 2.0)),
         private_nh.param<double>("cool_time_duration", 0.5)));
@@ -307,7 +306,6 @@ private:
         dzlog_info("@@@@@@ load init Pose() from rosparam , init_pos_x = %f, init_pos_y = %f, init_pos_z = %f ...... " , private_nh.param<double>("init_pos_x", 0.0) , private_nh.param<double>("init_pos_y", 0.0) , private_nh.param<double>("init_pos_z", 0.0));
         pose_estimator.reset(new hdl_localization::PoseEstimator(
           registration,
-          ros::Time::now(),
           Eigen::Vector3f(private_nh.param<double>("init_pos_x", 0.0), private_nh.param<double>("init_pos_y", 0.0), private_nh.param<double>("init_pos_z", 0.0)),
           Eigen::Quaternionf(
             private_nh.param<double>("init_ori_w", 1.0),
@@ -593,7 +591,6 @@ private:
       aligned_pub.publish(aligned);
     }
 
-    // dzlog_info("locate use time is %lf  s", ros::Time::now().toSec() - s_t.toSec());
   }
 
   /**
@@ -664,7 +661,6 @@ private:
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
-      ros::Time::now(),
       pose.translation(),
       Eigen::Quaternionf(pose.linear()),
       private_nh.param<double>("cool_time_duration", 0.5)));
@@ -770,7 +766,6 @@ private:
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
-      ros::Time::now(),
       Eigen::Vector3f(p.x, p.y, mean_z),
       Eigen::Quaternionf(q.w, q.x, q.y, q.z),
       private_nh.param<double>("cool_time_duration", 0.5)));

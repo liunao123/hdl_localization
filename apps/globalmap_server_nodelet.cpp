@@ -4,7 +4,6 @@
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
-#include <tf_conversions/tf_eigen.h>
 #include <tf/transform_broadcaster.h>
 
 #include <std_msgs/String.h>
@@ -20,7 +19,8 @@ namespace hdl_localization {
 
 class GlobalmapServerNodelet : public nodelet::Nodelet {
 public:
-  using PointT = pcl::PointXYZI;
+  // using PointT = pcl::PointXYZI;
+  using PointT = pcl::PointXYZRGB;
 
   GlobalmapServerNodelet() {
   }
@@ -33,7 +33,7 @@ public:
     private_nh = getPrivateNodeHandle();
 	  initZlog();
 
-    // initialize_params();
+    initialize_params();
 
     // publish globalmap with "latched" publisher
     globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
@@ -46,12 +46,8 @@ private:
   void initialize_params() {
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
-
     globalmap.reset(new pcl::PointCloud<PointT>());
-    
-    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.35);
-    dzlog_info(" voxel filter <resolution : %f >  . ", downsample_resolution );
-
+  
     dzlog_info("start load global map : %s ", globalmap_pcd.c_str());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
@@ -71,7 +67,8 @@ private:
     }
 
     // downsample globalmap
-
+    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.35);
+    dzlog_info(" voxel filter <resolution : %f >  . ", downsample_resolution );
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     voxelgrid->setInputCloud(globalmap);
@@ -80,14 +77,14 @@ private:
     voxelgrid->filter(*filtered);
 
     globalmap = filtered;
-    dzlog_info("size if global map after voxel filter : %ld . " , globalmap->points.size());
+    dzlog_info("size of global map after voxel filter : %ld . " , globalmap->points.size());
   }
 
   void pub_once_cb(const ros::WallTimerEvent& event) {
     if (!globalmap) {
       dzlog_info("globalmap has not been load!!");
       return;
-    }    
+    }
     globalmap_pub.publish(globalmap);
   }
 
@@ -111,7 +108,7 @@ private:
 	
 	  dzlog_info(" start to load global map : %s ." ,  msg.data.c_str() );
 
-    if (globalmap_pcd_last == msg.data)
+    if (globalmap_pcd_last == msg.data && globalmap != nullptr )
     {
       globalmap_pub.publish(globalmap);
 	    dzlog_info(" same pcd return " );
@@ -124,7 +121,7 @@ private:
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
 	
-    dzlog_info("size if global map: %ld . ",globalmap->points.size());
+    dzlog_info("size of global map: %ld . ",globalmap->points.size());
 	
     // downsample globalmap
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
@@ -138,7 +135,7 @@ private:
     globalmap = filtered;
     globalmap_pub.publish(globalmap);
 
-	  dzlog_info("size if global map after voxel filter : %ld . " , globalmap->points.size());
+	  dzlog_info("size of global map after voxel filter : %ld . " , globalmap->points.size());
 	
   }
 

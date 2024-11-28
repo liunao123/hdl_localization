@@ -1,22 +1,20 @@
 <?xml version="1.0"?>
 <launch>
-  
-  <!-- <param name="use_sim_time" value="true" /> -->
 
-  <arg name="nodelet_manager" default="velodyne_nodelet_manager_globalmap" />
+  <arg name="nodelet_manager" default="hdl_globalmap_nodelet_manager" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
     <!-- globalmap_server_nodelet -->
-    <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" output="screen" respawn="true" args="standalone  hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
+    <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" output="screen" required="true" args="standalone  hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
       <!-- 园区 -->
       <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v2_test_pcd_30_cm.pcd" /> -->
-      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v1_yuanqu.pcd" />  -->
-      <param name="globalmap_pcd" value="/home/map/sys_10cm.pcd" /> 
+      <!-- <param name="globalmap_pcd" value="/home/liunao/qt/pcd/test/v1_yuanqu.p1cd" />  -->
+      <param name="globalmap_pcd" value="/home/map/region3-3/saveMap.pcd" /> 
       <param name="convert_utm_to_local" value="false" />
-      <param name="downsample_resolution" value="0.1" />
+      <param name="downsample_resolution" value="0.05" />
   </node>
-
-  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="log" respawn="true" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
-
+<!-- 
+  <node name="rviz_hdl_loc" pkg="rviz" type="rviz" output="log" required="true" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz" />
+ -->
 </launch>
